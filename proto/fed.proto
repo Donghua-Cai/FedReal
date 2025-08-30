@@ -1,0 +1,64 @@
+syntax = "proto3";
+package fed;
+
+// 训练配置（由服务端下发，客户端也会上报用于对齐）
+message TrainingConfig {
+  int32 num_clients = 1;
+  int32 total_rounds = 2;
+  int32 local_epochs = 3;
+  int32 batch_size = 4;
+  float lr = 5;
+  float momentum = 6;
+  string partition_method = 7; // "iid" | "dirichlet"
+  float dirichlet_alpha = 8;
+  int32 seed = 9;
+  float sample_fraction = 10;   // 每轮采样比例（0~1]
+  string model_name = 11;       // 例如 "resnet18"
+  int32 max_message_mb = 12;    // gRPC 最大消息大小（MB）
+}
+
+message RegisterRequest {
+  string client_name = 1; // 便于日志定位
+}
+
+message RegisterReply {
+  string client_id = 1;   // 由服务端分配
+  int32 client_index = 2; // [0, num_clients)
+  TrainingConfig config = 3;
+}
+
+message GetTaskRequest {
+  string client_id = 1;
+}
+
+message TaskReply {
+  int32 round = 1;            // 当前轮次
+  bool participate = 2;       // 本轮是否被采样
+  bytes global_model = 3;     // 当前全局模型（state_dict 序列化）
+  TrainingConfig config = 4;  // 冗余携带，确保对齐
+}
+
+message UploadRequest {
+  string client_id = 1;
+  int32 round = 2;
+  bytes local_model = 3;  // 本地训练后的完整权重（简单实现）
+  int64 num_samples = 4;  // 本地训练使用的样本数（用于加权）
+  // 简单指标（可选）
+  double train_loss = 5;
+  double train_acc = 6;
+  double test_loss = 7;
+  double test_acc = 8;
+}
+
+message UploadReply {
+  bool accepted = 1;
+  int32 round = 2; // 服务端当前轮
+}
+
+message Ack { bool ok = 1; string msg = 2; }
+
+service FederatedService {
+  rpc RegisterClient(RegisterRequest) returns (RegisterReply);
+  rpc GetTask(GetTaskRequest) returns (TaskReply);
+  rpc UploadUpdate(UploadRequest) returns (UploadReply);
+}
