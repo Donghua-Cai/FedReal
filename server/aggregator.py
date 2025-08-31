@@ -30,6 +30,9 @@ class Aggregator:
         self.completed_this_round: Set[str] = set()
         self.require_full = True # 强同步 (必须所有num_clients都训练完才进入下一轮)
 
+        # 暂存：public logits（按轮、按客户端、再按 chunk）
+        self.public_logits_chunks = {}  # {(round, client_id): {chunk_id: (indices, logits_bytes, rows, num_classes)}}
+
     # —— 注册 ——
     def register(self, client_name: str) -> Tuple[str, int]:
         with self.lock:
@@ -161,3 +164,25 @@ class Aggregator:
         self.expected_updates = 0
         self.received_updates.clear()
         self.completed_this_round.clear()
+    
+    def accept_public_logits_chunk(
+        self, client_id: str, round_id: int,
+        chunk_id: int, is_last: bool,
+        indices: list[int], logits_bytes: bytes,
+        rows: int, num_classes: int,
+        total_examples: int | None, total_chunks: int | None,
+    ):
+        key = (round_id, client_id)
+        d = self.public_logits_chunks.setdefault(key, {})
+        d[chunk_id] = (indices, logits_bytes, rows, num_classes, is_last, total_examples, total_chunks)
+        # ★ 这里先不做任何进一步处理；你之后可在此做校验/累积大小等
+
+    def finalize_public_logits(self, client_id: str, round_id: int):
+        """
+        将分片拼接成完整 [N, C]（或留给下游再处理）。
+        这里先留空实现（你后面补）。
+        """
+        key = (round_id, client_id)
+        # 示例：检查分片完整性、对 indices 排序、拼接 bytes -> numpy/tensor
+        # 完成后可存 self.public_logits_buffer[(round, client_id)] = (indices_all, logits_np)
+        pass

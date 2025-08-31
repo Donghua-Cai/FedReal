@@ -55,10 +55,37 @@ message UploadReply {
   int32 round = 2; // 服务端当前轮
 }
 
+// 每个 chunk 承载一部分公共数据集的 logits（行优先 row-major）
+message PublicLogitsChunk {
+  string client_id  = 1;
+  int32  round      = 2;
+
+  // 当前分片 ID（从 0 开始）与是否为最后一片
+  int32  chunk_id   = 3;
+  bool   is_last    = 4;
+
+  // 该分片对应的样本“全局下标”（和服务端 public set 的顺序对齐）
+  // 若客户端严格按服务端 public set 顺序全量上传，也可不填 indices，
+  // 但为了健壮性建议填上。
+  repeated int64 indices = 10;
+
+  // 本分片 logits，float32 按 [rows, num_classes] row-major 展平后的 bytes
+  bytes  logits = 11;
+
+  // 维度辅助信息（便于服务端快速校验）
+  int32  rows          = 12;  // 本分片样本数
+  int32  num_classes   = 13;  // 类别数（全分片一致）
+
+  // 可选：总览信息（第一片或最后一片带上也行）
+  int32  total_examples = 20; // 公共数据集总样本数（可选）
+  int32  total_chunks   = 21; // 计划的分片数（可选）
+}
+
 message Ack { bool ok = 1; string msg = 2; }
 
 service FederatedService {
   rpc RegisterClient(RegisterRequest) returns (RegisterReply);
   rpc GetTask(GetTaskRequest) returns (TaskReply);
   rpc UploadUpdate(UploadRequest) returns (UploadReply);
+  rpc UploadPublicLogits (stream PublicLogitsChunk) returns (UploadReply);
 }
