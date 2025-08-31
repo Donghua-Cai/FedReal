@@ -27,6 +27,7 @@ class Aggregator:
         self.received_updates: Dict[str, Tuple[bytes, int]] = {}
         self.lock = threading.Lock()
 
+        self.completed_this_round: Set[str] = set()
         self.require_full = True # 强同步 (必须所有num_clients都训练完才进入下一轮)
 
     # —— 注册 ——
@@ -40,10 +41,20 @@ class Aggregator:
     # —— 采样 ——
     def _ensure_sampling(self):
         with self.lock:
+            # 终止条件：到达总轮数后，不再采样
+            if self.current_round >= self.cfg.total_rounds:
+                self.selected_this_round = []
+                self.expected_updates = 0
+                self.received_updates.clear()
+                return
+
             # 如果本轮已经采样过，直接返回
             if self.expected_updates > 0 or self.selected_this_round:
                 return
 
+            print(f"[Server] ensure_sampling: registered={len(self.registered)} "
+                  f"N={self.cfg.num_clients} sample_fraction={self.cfg.sample_fraction} round={self.current_round}")
+            
             # 强同步：未满足配置的 num_clients 数量，不开轮（所有客户端都会拿到 participate=False）
             if self.require_full and len(self.registered) < self.cfg.num_clients:
                 self.selected_this_round = []
@@ -66,15 +77,32 @@ class Aggregator:
             self.expected_updates = len(self.selected_this_round)
             self.received_updates.clear()
 
+            # 采样成功后打印
+            if self.selected_this_round:
+                print(f"[Server] Round {self.current_round} sampling -> "
+                    f"{self.selected_this_round}, expected_updates={self.expected_updates}")
+            else:
+                print(f"[Server] Round {self.current_round} not started (waiting)")
+
     # —— 获取任务 ——
     def get_task(self, client_id: str):
+        # 采样逻辑仍在内部加锁执行
         self._ensure_sampling()
-        participate = client_id in self.selected_this_round
-        return self.current_round, participate, self.global_bytes
+        with self.lock:
+            if self.current_round >= self.cfg.total_rounds:
+                return self.current_round, False, self.global_bytes
+            # 如果本轮未开（强同步等待）或不在采样名单，直接不参与
+            participate = client_id in self.selected_this_round
+            # 已经上传过本轮更新的客户端，不再参与，避免重复训练
+            if client_id in self.completed_this_round:
+                participate = False
+            return self.current_round, participate, self.global_bytes
 
     # —— 收到更新 ——
     def submit_update(self, client_id: str, round_id: int, local_bytes: bytes, num_samples: int):
         with self.lock:
+            print(f"[Server] recv from {client_id} for round={round_id} "
+                  f"(curr={self.current_round}), total_received={len(self.received_updates)+1}/{self.expected_updates}")
             # 仅接受当前轮更新
             if round_id != self.current_round:
                 return False
@@ -82,6 +110,7 @@ class Aggregator:
             if client_id in self.received_updates:
                 return True
             self.received_updates[client_id] = (local_bytes, num_samples)
+            self.completed_this_round.add(client_id)
 
             if len(self.received_updates) >= self.expected_updates:
                 self._aggregate_and_advance()
@@ -131,3 +160,4 @@ class Aggregator:
         self.selected_this_round = []
         self.expected_updates = 0
         self.received_updates.clear()
+        self.completed_this_round.clear()

@@ -130,7 +130,7 @@ def main():
 
     try:
         while True:
-            time.sleep(1)
+            time.sleep(5)
             if service.aggregator.current_round >= cfg.total_rounds:
                 print("[Server] Training completed. Press Ctrl+C to stop.")
                 # 可根据需要自动退出

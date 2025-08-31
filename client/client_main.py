@@ -52,6 +52,7 @@ def main():
     device = torch.device(args.device)
 
     # 主循环
+    uploaded_round = set()
     last_round = -1
     while True:
         task = stub.GetTask(fed_pb2.GetTaskRequest(client_id=client_id))

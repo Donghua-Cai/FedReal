@@ -7,7 +7,6 @@ Real Federated Learning via python grpc
 - 传输走 **完整权重**（`state_dict` → bytes），并在 gRPC 里把最大消息大小调大到默认 **128MB**。
 - 服务端与客户端都做评测；服务端在每轮聚合后用公共测试集评估。
 - 代码层面高度解耦，后续可加三层拓展（边缘聚合、伪标签/蒸馏）。
-
 ## 依赖
 ```bash
 pip install torch torchvision torchaudio grpcio grpcio-tools
@@ -25,8 +24,8 @@ python -m grpc_tools.protoc -I proto --python_out=proto --grpc_python_out=proto 
 python -m server.server_main \
   --bind 0.0.0.0:50052 \
   --data_root ./data \
-  --num_clients 3 \
-  --rounds 30 \
+  --num_clients 2 \
+  --rounds 3 \
   --local_epochs 5 \
   --batch_size 64 \
   --lr 0.01 --momentum 0.9 \
