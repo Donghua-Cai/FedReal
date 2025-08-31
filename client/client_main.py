@@ -4,8 +4,11 @@ import grpc
 import torch
 
 from proto import fed_pb2, fed_pb2_grpc
-from common.dataset.dataset import build_cifar10_loaders_for_client
-from common.model.model import create_model
+from common.dataset import (
+    build_imagefolder_loaders_for_client,
+    train_tf_cifar10, test_tf_cifar10,
+)
+from common.model.create_model import create_model
 from common.serialization import bytes_to_state_dict, state_dict_to_bytes
 from client.trainer import train_local, evaluate
 
@@ -16,7 +19,20 @@ def main():
     parser.add_argument("--client_name", type=str, default="client")
     parser.add_argument("--data_root", type=str, default="./data")
     parser.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu")
-
+    parser.add_argument("--dataset_name", type=str, default="cifar10",
+                        help="Dataset name under data/, e.g., cifar10, nwpu, dota")
+    parser.add_argument("--num_clients", type=int, default=3)
+    parser.add_argument("--partition_method", type=str, default="iid",
+                        choices=["iid", "dirichlet"])
+    parser.add_argument("--dirichlet_alpha", type=float, default=0.5,
+                        help="Dirichlet alpha for non-IID partition")
+    parser.add_argument("--client_test_ratio", type=float, default=0.1,
+                        help="Local train/test split ratio")
+    parser.add_argument("--num_workers", type=int, default=None,
+                        help="Dataloader workers (None = auto)")
+    parser.add_argument("--batch_size", type=int, default=64,
+                        help="Batch size")
+    parser.add_argument("--seed", type=int, default=42)
     args = parser.parse_args()
 
     # 初次连接，使用默认 128MB；后续按服务端回传的配置调整
@@ -39,15 +55,23 @@ def main():
     print(f"[Client {client_id}] index={client_index}; device={args.device}")
 
     # 依据配置构建本地数据加载器（确定性划分）
-    train_loader, test_loader, public_test_loader, n_train = build_cifar10_loaders_for_client(
-        data_root=args.data_root,
-        client_index=client_index,
-        num_clients=cfg.num_clients,
-        partition_method=cfg.partition_method,
-        dirichlet_alpha=cfg.dirichlet_alpha,
-        batch_size=cfg.batch_size,
-        seed=cfg.seed,
-    )
+    # 例如：dataset_name 用 "cifar10"（对应 data/cifar10/train, data/cifar10/test）
+    train_loader, test_loader, public_test_loader, train_size, num_classes = \
+        build_imagefolder_loaders_for_client(
+            data_root=args.data_root,
+            dataset_name=args.dataset_name,      # 新增一个 CLI 参数，比如默认 "cifar10"
+            client_index=client_index,
+            num_clients=args.num_clients,
+            partition_method=args.partition_method,
+            dirichlet_alpha=args.dirichlet_alpha,
+            batch_size=args.batch_size,
+            seed=args.seed,
+            num_workers=getattr(args, "num_workers", None),
+            pin_memory=None,                     # 自动根据是否有 CUDA 决定
+            client_test_ratio=args.client_test_ratio,
+            train_transform=train_tf_cifar10,    # 你的硬编码 transform
+            test_transform=test_tf_cifar10,
+        )
 
     device = torch.device(args.device)
 
@@ -86,7 +110,7 @@ def main():
                 client_id=client_id,
                 round=task.round,
                 local_model=local_bytes,
-                num_samples=n_train,
+                num_samples=train_size,
                 train_loss=train_loss,
                 train_acc=train_acc,
                 test_loss=test_loss,

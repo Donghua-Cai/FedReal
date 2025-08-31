@@ -41,3 +41,18 @@ python -m server.server_main \
 python -m client.client_main --server 127.0.0.1:50052 --client_name c0 --data_root ./data
 python -m client.client_main --server 127.0.0.1:50052 --client_name c1 --data_root ./data
 python -m client.client_main --server 127.0.0.1:50052 --client_name c2 --data_root ./data
+
+python -m client.client_main \
+  --server 127.0.0.1:50052 \
+  --client_name c0 \
+  --data_root ./data \
+  --dataset_name cifar10 \
+  --num_clients 2 \
+  --partition_method iid \
+  --dirichlet_alpha 0.5 \
+  --client_test_ratio 0.1 \
+  --batch_size 64
+
+python -m client.client_main   --server 127.0.0.1:50052   --client_name c0   --data_root ./data   --dataset_name cifar10   --num_clients 2   --partition_method iid   --dirichlet_alpha 0.5   --client_test_ratio 0.1   --batch_size 64
+
+python -m client.client_main   --server 127.0.0.1:50052   --client_name c1   --data_root ./data   --dataset_name cifar10   --num_clients 2   --partition_method iid   --dirichlet_alpha 0.5   --client_test_ratio 0.1   --batch_size 64

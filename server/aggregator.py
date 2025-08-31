@@ -4,7 +4,7 @@ import math
 import torch
 
 from common.serialization import bytes_to_state_dict, state_dict_to_bytes
-from common.model.model import create_model
+from common.model.create_model import create_model
 from common.utils import select_clients
 
 

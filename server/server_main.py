@@ -81,6 +81,10 @@ def main():
     parser.add_argument("--model_name", type=str, default="resnet18")
     parser.add_argument("--max_message_mb", type=int, default=128)
     parser.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu")
+    parser.add_argument("--dataset_name", type=str, default="cifar10",
+                        help="Dataset name under data/, used to build public test loader")
+    parser.add_argument("--num_workers", type=int, default=None,
+                        help="Dataloader workers (None = auto)")
     args = parser.parse_args()
 
     cfg = FedConfig(
