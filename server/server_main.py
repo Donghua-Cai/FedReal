@@ -1,3 +1,4 @@
+# server/server_main.py
 import argparse
 import concurrent.futures
 import grpc
@@ -7,9 +8,45 @@ import torch
 
 from proto import fed_pb2, fed_pb2_grpc  # 由 protoc 生成
 from common.config import FedConfig
-from common.dataset.dataset import build_cifar10_loaders_for_client
 from common.serialization import state_dict_to_bytes
 from server.aggregator import Aggregator
+
+from common.dataset.data_transform import test_tf_cifar10
+from torchvision import datasets
+from torch.utils.data import DataLoader
+
+
+def _make_public_test_loader(data_root: str, dataset_name: str, batch_size: int, num_workers=None):
+    """
+    从 data/<dataset_name>/test 或 val 构建公共测试集 DataLoader。
+    如果两个目录都不存在，则返回 None。
+    """
+    test_dir = None
+    for candidate in ["test", "val"]:
+        cand_dir = os.path.join(data_root, dataset_name, candidate)
+        if os.path.isdir(cand_dir):
+            test_dir = cand_dir
+            break
+
+    if test_dir is None:
+        print(f"[Server][Warn] No public test dir found under {data_root}/{dataset_name} (global eval disabled)")
+        return None
+
+    has_cuda = torch.cuda.is_available()
+    if num_workers is None:
+        num_workers = 2 if has_cuda else 0
+    pin_memory = True if has_cuda else False
+
+    public_set = datasets.ImageFolder(test_dir, transform=test_tf_cifar10)
+    public_loader = DataLoader(
+        public_set,
+        batch_size=batch_size,
+        shuffle=False,
+        num_workers=num_workers,
+        pin_memory=pin_memory,
+    )
+    print(f"[Server] Using public test dir: {test_dir} (samples={len(public_set)})")
+    return public_loader
 
 
 class FederatedService(fed_pb2_grpc.FederatedServiceServicer):
@@ -68,6 +105,8 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--bind", type=str, default="0.0.0.0:50051")
     parser.add_argument("--data_root", type=str, default="./data")
+    parser.add_argument("--dataset_name", type=str, default="cifar10",
+                        help="Dataset name under data/, used to build public test loader")
     parser.add_argument("--num_clients", type=int, default=3)
     parser.add_argument("--rounds", type=int, default=30)
     parser.add_argument("--local_epochs", type=int, default=5)
@@ -81,10 +120,7 @@ def main():
     parser.add_argument("--model_name", type=str, default="resnet18")
     parser.add_argument("--max_message_mb", type=int, default=128)
     parser.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu")
-    parser.add_argument("--dataset_name", type=str, default="cifar10",
-                        help="Dataset name under data/, used to build public test loader")
-    parser.add_argument("--num_workers", type=int, default=None,
-                        help="Dataloader workers (None = auto)")
+    parser.add_argument("--num_workers", type=int, default=None, help="Dataloader workers (None = auto)")
     args = parser.parse_args()
 
     cfg = FedConfig(
@@ -102,16 +138,12 @@ def main():
         max_message_mb=args.max_message_mb,
     )
 
-    # 为了复用客户端的数据管线，这里使用 client builder 拿到公共测试集
-    # 任取 client_index=0 仅为了获得 public_test_loader
-    _, _, public_test_loader, _ = build_cifar10_loaders_for_client(
+    # ✅ 使用 ImageFolder(test/) 构建公共测试集（若无 test/ 则为 None）
+    public_test_loader = _make_public_test_loader(
         data_root=args.data_root,
-        client_index=0,
-        num_clients=cfg.num_clients,
-        partition_method=cfg.partition_method,
-        dirichlet_alpha=cfg.dirichlet_alpha,
+        dataset_name=args.dataset_name,
         batch_size=cfg.batch_size,
-        seed=cfg.seed,
+        num_workers=args.num_workers,
     )
 
     service = FederatedService(cfg, public_test_loader=public_test_loader, device=args.device)
@@ -132,12 +164,18 @@ def main():
     server.start()
     print(f"[Server] Listening on {args.bind}; device={args.device}")
 
+    # 只打印一次“完成”
+    printed_done = False
     try:
         while True:
-            time.sleep(5)
-            if service.aggregator.current_round >= cfg.total_rounds:
-                print("[Server] Training completed. Press Ctrl+C to stop.")
-                # 可根据需要自动退出
+            time.sleep(1)
+            if (service.aggregator.current_round >= cfg.total_rounds
+                and service.aggregator.expected_updates == 0
+                and not service.aggregator.selected_this_round):
+                if not printed_done:
+                    print("[Server] Training completed. Press Ctrl+C to stop.")
+                    printed_done = True
+                # 如需自动退出，解除下一行注释
                 # break
     except KeyboardInterrupt:
         pass
