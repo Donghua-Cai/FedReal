@@ -51,7 +51,7 @@ class FederatedServiceStub(object):
                 _registered_method=True)
         self.UploadPublicLogits = channel.stream_unary(
                 '/fed.FederatedService/UploadPublicLogits',
-                request_serializer=fed__pb2.PublicLogitsChunk.SerializeToString,
+                request_serializer=fed__pb2.PublicLogitsPayload.SerializeToString,
                 response_deserializer=fed__pb2.UploadReply.FromString,
                 _registered_method=True)
 
@@ -103,7 +103,7 @@ def add_FederatedServiceServicer_to_server(servicer, server):
             ),
             'UploadPublicLogits': grpc.stream_unary_rpc_method_handler(
                     servicer.UploadPublicLogits,
-                    request_deserializer=fed__pb2.PublicLogitsChunk.FromString,
+                    request_deserializer=fed__pb2.PublicLogitsPayload.FromString,
                     response_serializer=fed__pb2.UploadReply.SerializeToString,
             ),
     }
@@ -213,7 +213,7 @@ class FederatedService(object):
             request_iterator,
             target,
             '/fed.FederatedService/UploadPublicLogits',
-            fed__pb2.PublicLogitsChunk.SerializeToString,
+            fed__pb2.PublicLogitsPayload.SerializeToString,
             fed__pb2.UploadReply.FromString,
             options,
             channel_credentials,

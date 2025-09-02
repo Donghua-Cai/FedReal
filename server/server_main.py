@@ -100,46 +100,19 @@ class FederatedService(fed_pb2_grpc.FederatedServiceServicer):
         )
         return fed_pb2.UploadReply(accepted=ok, round=self.aggregator.current_round)
 
-    # 新增：接收流式 logits
-    def UploadPublicLogits(self, request_iterator, context):
+    def UploadPublicLogits(self, request, context):
         """
-        接收 client 在指定 round 的公共集 logits 分片流。
-        将分片交给 aggregator 暂存/合并；最后返回一次 UploadReply。
+        一次性接收客户端上传的公共数据集 logits。
         """
-        client_id = None
-        round_id = None
-        num_classes = None
-        total_chunks = None
-        received_chunks = 0
-
-        for chunk in request_iterator:
-            if client_id is None:
-                client_id = chunk.client_id
-            if round_id is None:
-                round_id = chunk.round
-            if num_classes is None:
-                num_classes = chunk.num_classes
-            if chunk.total_chunks:
-                total_chunks = chunk.total_chunks
-
-            # 将分片交给聚合器（你来实现合并/校验/对齐逻辑）
-            self.aggregator.accept_public_logits_chunk(
-                client_id=chunk.client_id,
-                round_id=chunk.round,
-                chunk_id=chunk.chunk_id,
-                is_last=chunk.is_last,
-                indices=list(chunk.indices),
-                logits_bytes=chunk.logits,
-                rows=chunk.rows,
-                num_classes=chunk.num_classes,
-                total_examples=chunk.total_examples if chunk.total_examples else None,
-                total_chunks=chunk.total_chunks if chunk.total_chunks else None,
-            )
-            received_chunks += 1
-
-        # 你也可以在这里调用 aggregator 的 finalize 合并检查
-        self.aggregator.finalize_public_logits(client_id, round_id)
-
+        self.aggregator.accept_public_logits_payload(
+            client_id=request.client_id,
+            round_id=request.round,
+            logits_bytes=request.logits,
+            indices=list(request.indices),
+            num_classes=int(request.num_classes),
+            total_examples=int(request.total_examples) if request.HasField("total_examples") else None,
+        )
+        # 你也可以在这里调用 aggregator.finalize_public_logits(...) 做即时合并/校验
         return fed_pb2.UploadReply(accepted=True, round=self.aggregator.current_round)
 
 def main():

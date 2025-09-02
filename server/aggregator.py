@@ -165,24 +165,20 @@ class Aggregator:
         self.received_updates.clear()
         self.completed_this_round.clear()
     
-    def accept_public_logits_chunk(
-        self, client_id: str, round_id: int,
-        chunk_id: int, is_last: bool,
-        indices: list[int], logits_bytes: bytes,
-        rows: int, num_classes: int,
-        total_examples: int | None, total_chunks: int | None,
+    
+    def accept_public_logits_payload(
+        self,
+        client_id: str,
+        round_id: int,
+        logits_bytes: bytes,
+        indices: list[int] | None,
+        num_classes: int,
+        total_examples: int | None,
     ):
         key = (round_id, client_id)
-        d = self.public_logits_chunks.setdefault(key, {})
-        d[chunk_id] = (indices, logits_bytes, rows, num_classes, is_last, total_examples, total_chunks)
-        # ★ 这里先不做任何进一步处理；你之后可在此做校验/累积大小等
-
-    def finalize_public_logits(self, client_id: str, round_id: int):
-        """
-        将分片拼接成完整 [N, C]（或留给下游再处理）。
-        这里先留空实现（你后面补）。
-        """
-        key = (round_id, client_id)
-        # 示例：检查分片完整性、对 indices 排序、拼接 bytes -> numpy/tensor
-        # 完成后可存 self.public_logits_buffer[(round, client_id)] = (indices_all, logits_np)
-        pass
+        self.public_logits_payloads[key] = (indices, logits_bytes, num_classes, total_examples)
+        # 现在先“接住”即可；你后面可在需要处解析成 numpy/tensor：
+        #   import numpy as np
+        #   rows = (len(logits_bytes) // 4) // num_classes
+        #   logits = np.frombuffer(logits_bytes, dtype=np.float32).reshape(rows, num_classes)
+        # 然后做蒸馏/一致性之类的处理。
