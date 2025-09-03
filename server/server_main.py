@@ -15,46 +15,8 @@ from common.config import FedConfig
 from common.utils import setup_logger
 from server.aggregator import Aggregator
 
+from common.dataset.data_loader import make_global_loaders
 from common.dataset.data_transform import test_tf_cifar10
-
-
-def _make_public_test_loader(data_root: str, dataset_name: str, batch_size: int, num_workers=None):
-    """
-    从 data/<dataset_name>/test 或 val 构建公共测试集 DataLoader。
-    如果两个目录都不存在，则返回 None。
-    """
-    log = logging.getLogger("Server")
-
-    test_dir = None
-    for candidate in ["test", "val"]:
-        cand_dir = os.path.join(data_root, dataset_name, candidate)
-        if os.path.isdir(cand_dir):
-            test_dir = cand_dir
-            break
-
-    if test_dir is None:
-        log.warning(
-            f"No public test dir found under {os.path.join(data_root, dataset_name)} "
-            f"(global eval disabled)"
-        )
-        return None
-
-    has_cuda = torch.cuda.is_available()
-    if num_workers is None:
-        num_workers = 2 if has_cuda else 0
-    pin_memory = True if has_cuda else False
-
-    public_set = datasets.ImageFolder(test_dir, transform=test_tf_cifar10)
-    public_loader = DataLoader(
-        public_set,
-        batch_size=batch_size,
-        shuffle=False,
-        num_workers=num_workers,
-        pin_memory=pin_memory,
-    )
-    log.info(f"Using public test dir: {test_dir} (samples={len(public_set)})")
-    return public_loader
-
 
 class FederatedService(fed_pb2_grpc.FederatedServiceServicer):
     def __init__(self, cfg: FedConfig, public_test_loader, device: str = "cpu"):
@@ -164,15 +126,18 @@ def main():
         max_message_mb=args.max_message_mb,
     )
 
-    # 使用 ImageFolder(test|val) 构建公共测试集（若不存在则 None）
-    public_test_loader = _make_public_test_loader(
+    public_unl_loader, server_test_loader = make_global_loaders(
         data_root=args.data_root,
         dataset_name=args.dataset_name,
         batch_size=cfg.batch_size,
-        num_workers=args.num_workers,
+        seed=cfg.seed,                 # 确保与 client 一致
+        public_ratio=0.1,
+        server_test_ratio=0.1,
+        train_transform=test_tf_cifar10,  # 或者你自己的
+        test_transform=test_tf_cifar10,
     )
 
-    service = FederatedService(cfg, public_test_loader=public_test_loader, device=args.device)
+    service = FederatedService(cfg, public_test_loader=server_test_loader, device=args.device)
 
     max_len = cfg.max_message_mb * 1024 * 1024
     server = grpc.server(

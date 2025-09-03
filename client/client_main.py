@@ -62,21 +62,22 @@ def main():
 
     # 依据配置构建本地数据加载器（确定性划分）
     # 例如：dataset_name 用 "cifar10"（对应 data/cifar10/train, data/cifar10/test）
-    train_loader, test_loader, public_test_loader, train_size, num_classes = \
+    train_loader, test_loader, public_loader, train_size, num_classes = \
         build_imagefolder_loaders_for_client(
             data_root=args.data_root,
-            dataset_name=args.dataset_name,      # 新增一个 CLI 参数，比如默认 "cifar10"
+            dataset_name=args.dataset_name,
             client_index=client_index,
             num_clients=args.num_clients,
             partition_method=args.partition_method,
             dirichlet_alpha=args.dirichlet_alpha,
             batch_size=args.batch_size,
-            seed=args.seed,
-            num_workers=getattr(args, "num_workers", None),
-            pin_memory=None,                     # 自动根据是否有 CUDA 决定
-            client_test_ratio=args.client_test_ratio,
-            train_transform=train_tf_cifar10,    # 你的硬编码 transform
+            seed=args.seed,                      # 必须与 server 一致
+            train_transform=train_tf_cifar10,
             test_transform=test_tf_cifar10,
+            public_ratio=0.1,
+            server_test_ratio=0.1,
+            return_public_loader=True,           # 如暂时不用公共集，可设为 False
+            return_index_in_public=False,
         )
 
     device = torch.device(args.device)
