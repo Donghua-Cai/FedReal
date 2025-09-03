@@ -76,6 +76,8 @@ message PublicLogitsPayload {
   // 维度信息（用于快速校验）
   int32  num_classes     = 12;  // C
   optional int32 total_examples = 13;  // N（可选）
+
+  optional int32 local_train_samples = 14;
 }
 
 

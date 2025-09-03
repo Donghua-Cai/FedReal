@@ -18,6 +18,10 @@ from client.trainer import train_local, evaluate
 
 
 def main():
+    
+    start_time = None
+    end_time = None
+
     parser = argparse.ArgumentParser()
     parser.add_argument("--server", type=str, default="127.0.0.1:50051")
     parser.add_argument("--client_name", type=str, default="client")
@@ -96,8 +100,18 @@ def main():
     last_round = -1
     while True:
         task = stub.GetTask(fed_pb2.GetTaskRequest(client_id=client_id))
+        
+        if start_time is None and task.round < cfg.total_rounds:
+            start_time = time.time()
+            logger.info("Training timer started.")
+
         if task.round >= cfg.total_rounds:
             logger.info(f"[Client {client_id}] All rounds finished.")
+            if start_time is not None and end_time is None:
+                end_time = time.time()
+                elapsed = end_time - start_time
+                logger.info(f"[Client {client_id}] Total training time: {elapsed:.2f}s "
+                            f"({elapsed/60:.2f} min)")
             break
 
         if task.round != last_round:

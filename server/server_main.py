@@ -4,6 +4,8 @@ import concurrent.futures
 import logging
 import os
 import time
+import threading
+from collections import defaultdict
 
 import grpc
 import torch
@@ -13,6 +15,7 @@ from torchvision import datasets
 from proto import fed_pb2, fed_pb2_grpc  # 由 protoc 生成
 from common.config import FedConfig
 from common.utils import setup_logger
+from common.utils import fmt_bytes
 from server.aggregator import Aggregator
 
 from common.dataset.data_loader import make_global_loaders
@@ -23,6 +26,18 @@ class FederatedService(fed_pb2_grpc.FederatedServiceServicer):
         self.cfg = cfg
         self.aggregator = Aggregator(cfg, public_test_loader=public_test_loader, device=device)
         self.logger = logging.getLogger("Server")
+        self.start_time = None
+        self.end_time = None
+
+        self._byte_lock = threading.Lock()
+        # 总量
+        self.bytes_down_global_total = 0          # 下发全局模型总字节（Server→Clients）
+        self.bytes_up_local_total = 0             # 回传本地模型总字节（Clients→Server）
+        self.bytes_up_logits_total = 0            # 回传logits总字节（Clients→Server）
+        # 分客户端
+        self.bytes_down_global_by_client = defaultdict(int)
+        self.bytes_up_local_by_client = defaultdict(int)
+        self.bytes_up_logits_by_client = defaultdict(int)
 
     def _cfg_to_proto(self) -> fed_pb2.TrainingConfig:
         return fed_pb2.TrainingConfig(
@@ -53,18 +68,43 @@ class FederatedService(fed_pb2_grpc.FederatedServiceServicer):
     # ---- RPC: 下发训练任务（全局模型+配置）----
     def GetTask(self, request, context):
         round_id, participate, global_bytes = self.aggregator.get_task(request.client_id)
-        # 训练尚未开始或已结束时的简单处理
+
+        # 首轮真正开始计时
+        if self.start_time is None and round_id < self.cfg.total_rounds and self.aggregator.expected_updates > 0:
+            import time as _t
+            self.start_time = _t.time()
+            self.logger.info("Training timer started.")
+
+        # ✅ 只有在确实要下发（global_bytes 非空）时才打印/统计
+        if global_bytes and len(global_bytes) > 0:
+            n = len(global_bytes)
+            self.logger.info(f"[Send] global_model bytes={n} ({n/1024/1024:.2f} MB) "
+                            f"to {request.client_id} for round={round_id}")
+            with self._byte_lock:
+                self.bytes_down_global_total += n
+                self.bytes_down_global_by_client[request.client_id] += n
+
+        # 结束保护：不参与
         if round_id >= self.cfg.total_rounds:
             participate = False
+
         return fed_pb2.TaskReply(
             round=round_id,
             participate=participate,
-            global_model=global_bytes,
+            global_model=global_bytes,  # 可能是空字节
             config=self._cfg_to_proto(),
         )
 
     # ---- RPC: 接收本地更新（模型权重/样本数/指标）----
     def UploadUpdate(self, request, context):
+        if request.local_model:
+            n = len(request.local_model)
+            self.logger.info(f"[Recv] local_model bytes={fmt_bytes(n)} "
+                            f"from {request.client_id} for round={request.round}")
+            with self._byte_lock:
+                self.bytes_up_local_total += n
+                self.bytes_up_local_by_client[request.client_id] += n
+
         ok = self.aggregator.submit_update(
             client_id=request.client_id,
             round_id=request.round,
@@ -74,15 +114,44 @@ class FederatedService(fed_pb2_grpc.FederatedServiceServicer):
         return fed_pb2.UploadReply(accepted=ok, round=self.aggregator.current_round)
 
     # ---- RPC: 一次性接收客户端上传的公共数据集 logits（非分片）----
-    def UploadPublicLogits(self, request, context):
-        self.aggregator.accept_public_logits_payload(
-            client_id=request.client_id,
-            round_id=request.round,
-            logits_bytes=request.logits,
-            indices=list(request.indices),
-            num_classes=int(request.num_classes),
-            total_examples=int(request.total_examples) if request.HasField("total_examples") else None,
-        )
+    def UploadPublicLogits(self, request_iterator, context):
+        """
+        流式接收客户端上传的公共数据集 logits。
+        现在通常只发 1 个 payload，但流式接口保留扩展性。
+        """
+        last_round = None
+        last_client = None
+        total_bytes = 0
+
+        for req in request_iterator:
+            last_round = req.round
+            last_client = req.client_id
+
+            # 字节统计 & 日志
+            n = len(req.logits) if req.logits is not None else 0
+            self.logger.info(f"[Recv] logits bytes={n} ({n/1024/1024:.2f} MB) "
+                            f"from {req.client_id} for round={req.round}")
+            total_bytes += n
+            # 可选：写入你在 __init__ 里加的全程统计计数器
+            with self._byte_lock:
+                self.bytes_up_logits_total += n
+                self.bytes_up_logits_by_client[req.client_id] += n
+
+            # ✅ 新增：把 local_train_samples 也传下去（可能没有）
+            local_train_samples = req.local_train_samples if req.HasField("local_train_samples") else None
+            total_examples = req.total_examples if req.HasField("total_examples") else None
+
+            self.aggregator.accept_public_logits_payload(
+                client_id=req.client_id,
+                round_id=req.round,
+                logits_bytes=req.logits,
+                indices=list(req.indices),
+                num_classes=int(req.num_classes),
+                total_examples=int(total_examples) if total_examples is not None else None,
+                local_train_samples=int(local_train_samples) if local_train_samples is not None else None,
+            )
+
+        # 流结束，返回 Ack（你现在返回 UploadReply）
         return fed_pb2.UploadReply(accepted=True, round=self.aggregator.current_round)
 
 
@@ -167,10 +236,33 @@ def main():
                 and service.aggregator.expected_updates == 0
                 and not service.aggregator.selected_this_round):
                 if not printed_done:
-                    logger.info("Training completed. Press Ctrl+C to stop.")
+                    if service.start_time is not None:
+                        service.end_time = time.time()
+                        elapsed = service.end_time - service.start_time
+                        logger.info(f"Training completed. Total time: {elapsed:.2f}s ({elapsed/60:.2f} min).")
+                    else:
+                        logger.info("Training completed.")
+                    
+                    with service._byte_lock:
+                        down = service.bytes_down_global_total
+                        up_local = service.bytes_up_local_total
+                        up_logits = service.bytes_up_logits_total
+                    logger.info(
+                        "[Traffic Summary] "
+                        f"down_global={fmt_bytes(down)}, "
+                        f"up_local={fmt_bytes(up_local)}, "
+                        f"up_logits={fmt_bytes(up_logits)}, "
+                        f"total={fmt_bytes(down + up_local + up_logits)}"
+                    )
+                    # 如需查看分客户端明细：
+                    for cid, v in service.bytes_down_global_by_client.items():
+                        logger.info(f"[Traffic Detail] {cid} down_global={fmt_bytes(v)}")
+                    for cid, v in service.bytes_up_local_by_client.items():
+                        logger.info(f"[Traffic Detail] {cid} up_local={fmt_bytes(v)}")
+                    for cid, v in service.bytes_up_logits_by_client.items():
+                        logger.info(f"[Traffic Detail] {cid} up_logits={fmt_bytes(v)}")
                     printed_done = True
-                # 如需自动退出，解除下一行注释
-                # break
+                    print("Press Ctrl-C to exit")
     except KeyboardInterrupt:
         pass
     finally:

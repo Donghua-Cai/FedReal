@@ -38,3 +38,6 @@ def setup_logger(name: str, level: int = logging.INFO, rank: int | None = None) 
         logger = logging.LoggerAdapter(logger, {"rank": rank})
 
     return logger
+
+def fmt_bytes(n: int) -> str:
+    return f"{n} B ({n/1024/1024:.2f} MB)"

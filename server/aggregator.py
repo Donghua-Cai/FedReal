@@ -110,18 +110,26 @@ class Aggregator:
                 logger.warning(f"Round {self.current_round} not started (waiting)")
 
     # —— 获取任务 ——
+    # server/aggregator.py
     def get_task(self, client_id: str):
         # 采样逻辑仍在内部加锁执行
         self._ensure_sampling()
         with self.lock:
+            # 已经到总轮数：不再发模型
             if self.current_round >= self.cfg.total_rounds:
-                return self.current_round, False, self.global_bytes
-            # 如果本轮未开（强同步等待）或不在采样名单，直接不参与
-            participate = client_id in self.selected_this_round
-            # 已经上传过本轮更新的客户端，不再参与，避免重复训练
+                return self.current_round, False, b""
+
+            # 默认是否参与
+            participate = client_id in self.selected_this_round and self.expected_updates > 0
+
+            # 已经提交过更新的客户端，本轮不应再训练也不应再下发模型
             if client_id in self.completed_this_round:
                 participate = False
-            return self.current_round, participate, self.global_bytes
+                return self.current_round, False, b""
+
+            # 仅在“本轮被采样参与且尚未完成”时下发模型
+            model_bytes = self.global_bytes if participate else b""
+            return self.current_round, participate, model_bytes
 
     # —— 收到更新 ——
     def submit_update(self, client_id: str, round_id: int, local_bytes: bytes, num_samples: int):
@@ -202,19 +210,23 @@ class Aggregator:
         client_id: str,
         round_id: int,
         logits_bytes: bytes,
-        indices: Optional[List[int]],
+        indices: list[int] | None,
         num_classes: int,
-        total_examples: Optional[int],
+        total_examples: int | None,
+        local_train_samples: int | None,   # ✅ 新增
     ):
-        with self.lock:
-            key = (round_id, client_id)
-            self.public_logits_payloads[key] = (indices, logits_bytes, num_classes, total_examples)
+        key = (round_id, client_id)
+        if not hasattr(self, "public_logits_payloads"):
+            self.public_logits_payloads = {}
+        self.public_logits_payloads[key] = {
+            "indices": indices,
+            "logits_bytes": logits_bytes,
+            "num_classes": num_classes,
+            "total_examples": total_examples,
+            "local_train_samples": local_train_samples,  # ✅ 存起来
+        }
         logger.info(
-            f"accept_public_logits_payload from {client_id} (round={round_id}, "
+            f"[Server] cached public logits from {client_id} (round={round_id}), "
             f"bytes={len(logits_bytes)}, num_classes={num_classes}, "
-            f"indices={len(indices) if indices else 0})"
+            f"local_train_samples={local_train_samples}"
         )
-        # 需要时再解析：
-        # import numpy as np
-        # rows = (len(logits_bytes) // 4) // num_classes
-        # logits = np.frombuffer(logits_bytes, dtype=np.float32).reshape(rows, num_classes)
