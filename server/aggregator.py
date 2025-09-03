@@ -1,15 +1,20 @@
 import threading
-from typing import Dict, List, Tuple
+import logging
 import math
+from typing import Dict, List, Tuple, Set, Optional
+
 import torch
 
 from common.serialization import bytes_to_state_dict, state_dict_to_bytes
 from common.model.create_model import create_model
 from common.utils import select_clients
 
+# 使用与 server_main.py 同一命名空间的子 logger，继承其 handler/level
+logger = logging.getLogger("Server").getChild("Aggregator")
+
 
 class Aggregator:
-    def __init__(self, config, public_test_loader=None, device="cpu"):
+    def __init__(self, config, public_test_loader=None, device: str = "cpu"):
         self.cfg = config
         self.device = torch.device(device)
 
@@ -28,10 +33,12 @@ class Aggregator:
         self.lock = threading.Lock()
 
         self.completed_this_round: Set[str] = set()
-        self.require_full = True # 强同步 (必须所有num_clients都训练完才进入下一轮)
+        # 强同步：必须所有 num_clients 都训练完才进入下一轮
+        self.require_full = True
 
-        # 暂存：public logits（按轮、按客户端、再按 chunk）
-        self.public_logits_chunks = {}  # {(round, client_id): {chunk_id: (indices, logits_bytes, rows, num_classes)}}
+        # 一次性公共 logits 暂存
+        # {(round, client_id): (indices(list|None), logits_bytes(bytes), num_classes(int), total_examples(int|None))}
+        self.public_logits_payloads: Dict[Tuple[int, str], Tuple[Optional[List[int]], bytes, int, Optional[int]]] = {}
 
     # —— 注册 ——
     def register(self, client_name: str) -> Tuple[str, int]:
@@ -39,6 +46,7 @@ class Aggregator:
             client_id = f"C{len(self.registered):03d}"
             self.registered.append(client_id)
             self.client_index[client_id] = len(self.client_index)
+            logger.info(f"Registered {client_id} (index={self.client_index[client_id]})")
             return client_id, self.client_index[client_id]
 
     # —— 采样 ——
@@ -55,14 +63,21 @@ class Aggregator:
             if self.expected_updates > 0 or self.selected_this_round:
                 return
 
-            print(f"[Server] ensure_sampling: registered={len(self.registered)} "
-                  f"N={self.cfg.num_clients} sample_fraction={self.cfg.sample_fraction} round={self.current_round}")
-            
+            logger.debug(
+                f"ensure_sampling: registered={len(self.registered)} "
+                f"N={self.cfg.num_clients} sample_fraction={self.cfg.sample_fraction} "
+                f"round={self.current_round}"
+            )
+
             # 强同步：未满足配置的 num_clients 数量，不开轮（所有客户端都会拿到 participate=False）
             if self.require_full and len(self.registered) < self.cfg.num_clients:
                 self.selected_this_round = []
                 self.expected_updates = 0
                 self.received_updates.clear()
+                logger.warning(
+                    f"Round {self.current_round} not started: "
+                    f"registered={len(self.registered)} < required={self.cfg.num_clients}"
+                )
                 return
 
             # 采样数量基于配置的 num_clients（而不是已注册数量）
@@ -74,18 +89,25 @@ class Aggregator:
                 self.selected_this_round = []
                 self.expected_updates = 0
                 self.received_updates.clear()
+                logger.warning(
+                    f"Round {self.current_round} not started: sampled={k} < target={k_target}"
+                )
                 return
 
-            self.selected_this_round = select_clients(self.registered, k, self.current_round, seed=self.cfg.seed)
+            self.selected_this_round = select_clients(
+                self.registered, k, self.current_round, seed=self.cfg.seed
+            )
             self.expected_updates = len(self.selected_this_round)
             self.received_updates.clear()
 
             # 采样成功后打印
             if self.selected_this_round:
-                print(f"[Server] Round {self.current_round} sampling -> "
-                    f"{self.selected_this_round}, expected_updates={self.expected_updates}")
+                logger.info(
+                    f"Round {self.current_round} sampling -> "
+                    f"{self.selected_this_round}, expected_updates={self.expected_updates}"
+                )
             else:
-                print(f"[Server] Round {self.current_round} not started (waiting)")
+                logger.warning(f"Round {self.current_round} not started (waiting)")
 
     # —— 获取任务 ——
     def get_task(self, client_id: str):
@@ -104,14 +126,21 @@ class Aggregator:
     # —— 收到更新 ——
     def submit_update(self, client_id: str, round_id: int, local_bytes: bytes, num_samples: int):
         with self.lock:
-            print(f"[Server] recv from {client_id} for round={round_id} "
-                  f"(curr={self.current_round}), total_received={len(self.received_updates)+1}/{self.expected_updates}")
+            logger.info(
+                f"recv from {client_id} for round={round_id} "
+                f"(curr={self.current_round}), total_received={len(self.received_updates)+1}/{self.expected_updates}"
+            )
             # 仅接受当前轮更新
             if round_id != self.current_round:
+                logger.warning(
+                    f"drop update from {client_id}: stale round={round_id} (curr={self.current_round})"
+                )
                 return False
             # 只收一次
             if client_id in self.received_updates:
+                logger.debug(f"ignore duplicate update from {client_id}")
                 return True
+
             self.received_updates[client_id] = (local_bytes, num_samples)
             self.completed_this_round.add(client_id)
 
@@ -156,7 +185,9 @@ class Aggregator:
         if self.public_test_loader is not None:
             from .eval import evaluate
             loss, acc = evaluate(self.model, self.public_test_loader, device=self.device)
-            print(f"[Server][Round {self.current_round}] Global Eval — loss={loss:.4f}, acc={acc:.4f}")
+            logger.info(f"[Round {self.current_round}] Global Eval — loss={loss:.4f}, acc={acc:.4f}")
+        else:
+            logger.debug(f"[Round {self.current_round}] Global Eval — skipped (no public_test_loader)")
 
         # 前进到下一轮
         self.current_round += 1
@@ -164,21 +195,26 @@ class Aggregator:
         self.expected_updates = 0
         self.received_updates.clear()
         self.completed_this_round.clear()
-    
-    
+
+    # —— 接收一次性公共 logits —— 
     def accept_public_logits_payload(
         self,
         client_id: str,
         round_id: int,
         logits_bytes: bytes,
-        indices: list[int] | None,
+        indices: Optional[List[int]],
         num_classes: int,
-        total_examples: int | None,
+        total_examples: Optional[int],
     ):
-        key = (round_id, client_id)
-        self.public_logits_payloads[key] = (indices, logits_bytes, num_classes, total_examples)
-        # 现在先“接住”即可；你后面可在需要处解析成 numpy/tensor：
-        #   import numpy as np
-        #   rows = (len(logits_bytes) // 4) // num_classes
-        #   logits = np.frombuffer(logits_bytes, dtype=np.float32).reshape(rows, num_classes)
-        # 然后做蒸馏/一致性之类的处理。
+        with self.lock:
+            key = (round_id, client_id)
+            self.public_logits_payloads[key] = (indices, logits_bytes, num_classes, total_examples)
+        logger.info(
+            f"accept_public_logits_payload from {client_id} (round={round_id}, "
+            f"bytes={len(logits_bytes)}, num_classes={num_classes}, "
+            f"indices={len(indices) if indices else 0})"
+        )
+        # 需要时再解析：
+        # import numpy as np
+        # rows = (len(logits_bytes) // 4) // num_classes
+        # logits = np.frombuffer(logits_bytes, dtype=np.float32).reshape(rows, num_classes)

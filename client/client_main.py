@@ -2,6 +2,9 @@ import argparse
 import time
 import grpc
 import torch
+import logging
+import collections
+
 
 from proto import fed_pb2, fed_pb2_grpc
 from common.dataset import (
@@ -10,6 +13,7 @@ from common.dataset import (
 )
 from common.model.create_model import create_model
 from common.serialization import bytes_to_state_dict, state_dict_to_bytes
+from common.utils import setup_logger
 from client.trainer import train_local, evaluate
 
 
@@ -24,7 +28,7 @@ def main():
     parser.add_argument("--num_clients", type=int, default=3)
     parser.add_argument("--partition_method", type=str, default="iid",
                         choices=["iid", "dirichlet"])
-    parser.add_argument("--dirichlet_alpha", type=float, default=0.5,
+    parser.add_argument("--dirichlet_alpha", type=float, default=0.1,
                         help="Dirichlet alpha for non-IID partition")
     parser.add_argument("--client_test_ratio", type=float, default=0.1,
                         help="Local train/test split ratio")
@@ -34,6 +38,8 @@ def main():
                         help="Batch size")
     parser.add_argument("--seed", type=int, default=42)
     args = parser.parse_args()
+
+    logger = setup_logger(f"Client-{args.client_name}", level=logging.INFO)
 
     # 初次连接，使用默认 128MB；后续按服务端回传的配置调整
     max_len = 128 * 1024 * 1024
@@ -52,7 +58,7 @@ def main():
     client_index = reg.client_index
     cfg = reg.config
 
-    print(f"[Client {client_id}] index={client_index}; device={args.device}")
+    logger.info(f"[Client {client_id}] index={client_index}; device={args.device}")
 
     # 依据配置构建本地数据加载器（确定性划分）
     # 例如：dataset_name 用 "cifar10"（对应 data/cifar10/train, data/cifar10/test）
@@ -75,17 +81,26 @@ def main():
 
     device = torch.device(args.device)
 
+    train_labels = [y for _, y in train_loader.dataset.dataset.samples]  # 原始 dataset 的所有标签
+    train_indices = train_loader.dataset.indices                        # 当前 client 的样本索引
+    client_labels = [train_labels[i] for i in train_indices]
+
+    label_dist = collections.Counter(client_labels)
+    logger.info(f"[Client {client_id}] Data allocation: "
+                f"train_size={train_size}, test_size={len(test_loader.dataset)}")
+    logger.info(f"[Client {client_id}] Label distribution: {dict(label_dist)}")
+
     # 主循环
     uploaded_round = set()
     last_round = -1
     while True:
         task = stub.GetTask(fed_pb2.GetTaskRequest(client_id=client_id))
         if task.round >= cfg.total_rounds:
-            print(f"[Client {client_id}] All rounds finished.")
+            logger.info(f"[Client {client_id}] All rounds finished.")
             break
 
         if task.round != last_round:
-            print(f"[Client {client_id}] Enter round {task.round}")
+            logger.info(f"[Client {client_id}] Enter round {task.round}")
             last_round = task.round
 
         if not task.participate:
@@ -101,7 +116,7 @@ def main():
         optimizer = torch.optim.SGD(model.parameters(), lr=task.config.lr, momentum=task.config.momentum, weight_decay=5e-4)
         train_loss, train_acc = train_local(model, train_loader, epochs=task.config.local_epochs, optimizer=optimizer, device=device)
         test_loss, test_acc = evaluate(model, test_loader, device=device)
-        print(f"[Client {client_id}][Round {task.round}] train_acc={train_acc:.4f}, test_acc={test_acc:.4f}")
+        logger.info(f"[Client {client_id}][Round {task.round}] train_acc={train_acc:.4f}, test_acc={test_acc:.4f}")
 
         # 回传完整模型（简单实现）
         local_bytes = state_dict_to_bytes(model.state_dict())

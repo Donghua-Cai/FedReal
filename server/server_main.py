@@ -1,19 +1,21 @@
 # server/server_main.py
 import argparse
 import concurrent.futures
-import grpc
+import logging
 import os
 import time
+
+import grpc
 import torch
+from torch.utils.data import DataLoader
+from torchvision import datasets
 
 from proto import fed_pb2, fed_pb2_grpc  # 由 protoc 生成
 from common.config import FedConfig
-from common.serialization import state_dict_to_bytes
+from common.utils import setup_logger
 from server.aggregator import Aggregator
 
 from common.dataset.data_transform import test_tf_cifar10
-from torchvision import datasets
-from torch.utils.data import DataLoader
 
 
 def _make_public_test_loader(data_root: str, dataset_name: str, batch_size: int, num_workers=None):
@@ -21,6 +23,8 @@ def _make_public_test_loader(data_root: str, dataset_name: str, batch_size: int,
     从 data/<dataset_name>/test 或 val 构建公共测试集 DataLoader。
     如果两个目录都不存在，则返回 None。
     """
+    log = logging.getLogger("Server")
+
     test_dir = None
     for candidate in ["test", "val"]:
         cand_dir = os.path.join(data_root, dataset_name, candidate)
@@ -29,7 +33,10 @@ def _make_public_test_loader(data_root: str, dataset_name: str, batch_size: int,
             break
 
     if test_dir is None:
-        print(f"[Server][Warn] No public test dir found under {data_root}/{dataset_name} (global eval disabled)")
+        log.warning(
+            f"No public test dir found under {os.path.join(data_root, dataset_name)} "
+            f"(global eval disabled)"
+        )
         return None
 
     has_cuda = torch.cuda.is_available()
@@ -45,14 +52,15 @@ def _make_public_test_loader(data_root: str, dataset_name: str, batch_size: int,
         num_workers=num_workers,
         pin_memory=pin_memory,
     )
-    print(f"[Server] Using public test dir: {test_dir} (samples={len(public_set)})")
+    log.info(f"Using public test dir: {test_dir} (samples={len(public_set)})")
     return public_loader
 
 
 class FederatedService(fed_pb2_grpc.FederatedServiceServicer):
-    def __init__(self, cfg: FedConfig, public_test_loader, device="cpu"):
+    def __init__(self, cfg: FedConfig, public_test_loader, device: str = "cpu"):
         self.cfg = cfg
         self.aggregator = Aggregator(cfg, public_test_loader=public_test_loader, device=device)
+        self.logger = logging.getLogger("Server")
 
     def _cfg_to_proto(self) -> fed_pb2.TrainingConfig:
         return fed_pb2.TrainingConfig(
@@ -70,15 +78,17 @@ class FederatedService(fed_pb2_grpc.FederatedServiceServicer):
             max_message_mb=self.cfg.max_message_mb,
         )
 
+    # ---- RPC: 客户端注册 ----
     def RegisterClient(self, request, context):
         client_id, client_index = self.aggregator.register(request.client_name)
-        print(f"[Server] Registered {client_id} (index={client_index})")
+        self.logger.info(f"Registered {client_id} (index={client_index})")
         return fed_pb2.RegisterReply(
             client_id=client_id,
             client_index=client_index,
             config=self._cfg_to_proto(),
         )
 
+    # ---- RPC: 下发训练任务（全局模型+配置）----
     def GetTask(self, request, context):
         round_id, participate, global_bytes = self.aggregator.get_task(request.client_id)
         # 训练尚未开始或已结束时的简单处理
@@ -91,6 +101,7 @@ class FederatedService(fed_pb2_grpc.FederatedServiceServicer):
             config=self._cfg_to_proto(),
         )
 
+    # ---- RPC: 接收本地更新（模型权重/样本数/指标）----
     def UploadUpdate(self, request, context):
         ok = self.aggregator.submit_update(
             client_id=request.client_id,
@@ -100,10 +111,8 @@ class FederatedService(fed_pb2_grpc.FederatedServiceServicer):
         )
         return fed_pb2.UploadReply(accepted=ok, round=self.aggregator.current_round)
 
+    # ---- RPC: 一次性接收客户端上传的公共数据集 logits（非分片）----
     def UploadPublicLogits(self, request, context):
-        """
-        一次性接收客户端上传的公共数据集 logits。
-        """
         self.aggregator.accept_public_logits_payload(
             client_id=request.client_id,
             round_id=request.round,
@@ -112,8 +121,8 @@ class FederatedService(fed_pb2_grpc.FederatedServiceServicer):
             num_classes=int(request.num_classes),
             total_examples=int(request.total_examples) if request.HasField("total_examples") else None,
         )
-        # 你也可以在这里调用 aggregator.finalize_public_logits(...) 做即时合并/校验
         return fed_pb2.UploadReply(accepted=True, round=self.aggregator.current_round)
+
 
 def main():
     parser = argparse.ArgumentParser()
@@ -128,7 +137,7 @@ def main():
     parser.add_argument("--lr", type=float, default=0.01)
     parser.add_argument("--momentum", type=float, default=0.9)
     parser.add_argument("--partition_method", type=str, default="iid", choices=["iid", "dirichlet"])
-    parser.add_argument("--dirichlet_alpha", type=float, default=0.5)
+    parser.add_argument("--dirichlet_alpha", type=float, default=0.1)
     parser.add_argument("--sample_fraction", type=float, default=1.0)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--model_name", type=str, default="resnet18")
@@ -136,6 +145,9 @@ def main():
     parser.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu")
     parser.add_argument("--num_workers", type=int, default=None, help="Dataloader workers (None = auto)")
     args = parser.parse_args()
+
+    # 统一初始化命名 logger
+    logger = setup_logger("Server", level=logging.INFO)
 
     cfg = FedConfig(
         num_clients=args.num_clients,
@@ -152,7 +164,7 @@ def main():
         max_message_mb=args.max_message_mb,
     )
 
-    # ✅ 使用 ImageFolder(test/) 构建公共测试集（若无 test/ 则为 None）
+    # 使用 ImageFolder(test|val) 构建公共测试集（若不存在则 None）
     public_test_loader = _make_public_test_loader(
         data_root=args.data_root,
         dataset_name=args.dataset_name,
@@ -170,13 +182,16 @@ def main():
             ("grpc.max_receive_message_length", max_len),
         ],
     )
+
+    # 兼容不同 grpcio-tools 生成的函数名
     add_fn = getattr(fed_pb2_grpc, "add_FederatedServiceServicer_to_server", None)
     if add_fn is None:
         add_fn = fed_pb2_grpc.add_FederatedServiceServicerToServer
     add_fn(service, server)
+
     server.add_insecure_port(args.bind)
     server.start()
-    print(f"[Server] Listening on {args.bind}; device={args.device}")
+    logger.info(f"Listening on {args.bind}; device={args.device}")
 
     # 只打印一次“完成”
     printed_done = False
@@ -187,7 +202,7 @@ def main():
                 and service.aggregator.expected_updates == 0
                 and not service.aggregator.selected_this_round):
                 if not printed_done:
-                    print("[Server] Training completed. Press Ctrl+C to stop.")
+                    logger.info("Training completed. Press Ctrl+C to stop.")
                     printed_done = True
                 # 如需自动退出，解除下一行注释
                 # break
