@@ -10,7 +10,7 @@ python scripts/launch.py \
   --lr 0.01 \
   --momentum 0.9 \
   --partition_method dirichlet \
-  --dirichlet_alpha 0.5 \
+  --dirichlet_alpha 1 \
   --sample_fraction 1.0 \
   --seed 42 \
   --model_name resnet18 \

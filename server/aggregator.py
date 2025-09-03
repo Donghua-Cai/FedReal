@@ -18,7 +18,7 @@ class Aggregator:
         self.cfg = config
         self.device = torch.device(device)
 
-        self.model = create_model(self.cfg.model_name, num_classes=10).to(self.device)
+        self.model = create_model(self.cfg.model_name, num_classes=self.cfg.num_classes).to(self.device)
         self.global_bytes = state_dict_to_bytes(self.model.state_dict())
 
         self.public_test_loader = public_test_loader

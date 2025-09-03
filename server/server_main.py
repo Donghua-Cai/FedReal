@@ -19,7 +19,7 @@ from common.utils import fmt_bytes
 from server.aggregator import Aggregator
 
 from common.dataset.data_loader import make_global_loaders
-from common.dataset.data_transform import test_tf_cifar10
+from common.dataset.data_transform import get_transform
 
 class FederatedService(fed_pb2_grpc.FederatedServiceServicer):
     def __init__(self, cfg: FedConfig, public_test_loader, device: str = "cpu"):
@@ -53,6 +53,7 @@ class FederatedService(fed_pb2_grpc.FederatedServiceServicer):
             sample_fraction=self.cfg.sample_fraction,
             model_name=self.cfg.model_name,
             max_message_mb=self.cfg.max_message_mb,
+            num_classes=self.cfg.num_classes
         )
 
     # ---- RPC: 客户端注册 ----
@@ -202,9 +203,26 @@ def main():
         seed=cfg.seed,                 # 确保与 client 一致
         public_ratio=0.1,
         server_test_ratio=0.1,
-        train_transform=test_tf_cifar10,  # 或者你自己的
-        test_transform=test_tf_cifar10,
+        train_transform=get_transform(args.dataset_name, "test"),  # 或者你自己的
+        test_transform=get_transform(args.dataset_name, "test"),
     )
+
+    if server_test_loader is not None:
+        base_dataset = server_test_loader.dataset
+        if isinstance(base_dataset, torch.utils.data.Subset):
+            num_classes = len(base_dataset.dataset.classes)
+        else:
+            num_classes = len(base_dataset.classes)
+    elif public_unl_loader is not None:
+        base_dataset = public_unl_loader.dataset
+        if isinstance(base_dataset, torch.utils.data.Subset):
+            num_classes = len(base_dataset.dataset.classes)
+        else:
+            num_classes = len(base_dataset.classes)
+    else:
+        num_classes = 10  # fallback，避免报错
+
+    cfg.num_classes = num_classes
 
     service = FederatedService(cfg, public_test_loader=server_test_loader, device=args.device)
 

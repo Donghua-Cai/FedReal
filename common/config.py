@@ -14,6 +14,7 @@ class FedConfig:
     sample_fraction: float = 1.0
     model_name: str = "resnet18"
     max_message_mb: int = 128
+    num_classes: int = 10
 
     def to_dict(self):
         return self.__dict__.copy()

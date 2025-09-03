@@ -9,8 +9,8 @@ import collections
 from proto import fed_pb2, fed_pb2_grpc
 from common.dataset import (
     build_imagefolder_loaders_for_client,
-    train_tf_cifar10, test_tf_cifar10,
 )
+from common.dataset.data_transform import get_transform
 from common.model.create_model import create_model
 from common.serialization import bytes_to_state_dict, state_dict_to_bytes
 from common.utils import setup_logger
@@ -76,8 +76,8 @@ def main():
             dirichlet_alpha=args.dirichlet_alpha,
             batch_size=args.batch_size,
             seed=args.seed,                      # 必须与 server 一致
-            train_transform=train_tf_cifar10,
-            test_transform=test_tf_cifar10,
+            train_transform=get_transform(args.dataset_name, "train"),
+            test_transform=get_transform(args.dataset_name, "test"),
             public_ratio=0.1,
             server_test_ratio=0.1,
             return_public_loader=True,           # 如暂时不用公共集，可设为 False
@@ -123,7 +123,7 @@ def main():
             continue
 
         # 拉取并加载全局模型
-        model = create_model(task.config.model_name, num_classes=10).to(device)
+        model = create_model(task.config.model_name, num_classes=task.config.num_classes).to(device)
         state_dict = bytes_to_state_dict(task.global_model)
         model.load_state_dict(state_dict)
 
