@@ -4,7 +4,7 @@ python scripts/launch.py \
   --server_addr 127.0.0.1:50052 \
   --data_root ./data \
   --dataset_name cifar10 \
-  --rounds 30 \
+  --rounds 3 \
   --local_epochs 5 \
   --batch_size 64 \
   --lr 0.01 \

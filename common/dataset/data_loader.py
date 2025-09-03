@@ -7,16 +7,13 @@ import torch
 from torch.utils.data import DataLoader, Dataset, Subset
 from torchvision import datasets
 
-from .data_partition import iid_partition, dirichlet_partition, split_train_test  # split_train_test 仍可复用
-# 你已有的 transform（示例）
+from .data_partition import iid_partition, dirichlet_partition, split_train_test
 from common.dataset.data_transform import train_tf_cifar10, test_tf_cifar10
 
-
 __all__ = [
-    "make_global_loaders",                 # 服务器调用：得到公共无标签 + 服务器测试
-    "build_imagefolder_loaders_for_client" # 客户端调用：得到本地 train/test + 公共无标签（可选）
+    "make_global_loaders",                 # 服务器：公共无标签 + 服务器测试
+    "build_imagefolder_loaders_for_client" # 客户端：本地 train/test + （可选）公共无标签
 ]
-
 
 # ---------- 工具 ----------
 
@@ -43,7 +40,7 @@ def _targets_from_imagefolder(img_folder: datasets.ImageFolder) -> List[int]:
 
 
 class UnlabeledSubset(Dataset):
-    """只返回图像（无标签），可选返回索引。"""
+    """只返回图像（无标签），可选返回样本在 base 内的索引。"""
     def __init__(self, base: Dataset, indices: Sequence[int], return_index: bool = False):
         self.base = base
         self.indices = list(indices)
@@ -60,7 +57,7 @@ class UnlabeledSubset(Dataset):
         return img
 
 
-# ---------- 核心：计算“公共/服务器测试/剩余池” ----------
+# ---------- 计算“公共/服务器测试/剩余池” ----------
 
 def _compute_global_pools(
     train_set: datasets.ImageFolder,
@@ -97,7 +94,7 @@ def _compute_global_pools(
     return public_indices, server_test_indices, client_train_pool, client_test_pool
 
 
-# ---------- 服务器：构建公共无标签 + 服务器测试 ----------
+# ---------- 服务器端：公共无标签 + 服务器测试 ----------
 
 def make_global_loaders(
     data_root: str,
@@ -154,7 +151,7 @@ def build_imagefolder_loaders_for_client(
     seed: int = 42,
     num_workers: Optional[int] = None,
     pin_memory: Optional[bool] = None,
-    # 以下三个通常由你在 data_transform 里硬编码好
+    # 以下两个 transform 可按数据集名称在 data_transform 里选择；这里保持兼容
     train_transform=None,
     test_transform=None,
     # 与服务器保持一致的全局划分比例
@@ -198,7 +195,7 @@ def build_imagefolder_loaders_for_client(
     my_train_indices = [client_train_pool[i] for i in mapping_train[client_index]]
 
     # 测试池划分到各 client（如果有 eval_set）
-    my_test_indices = []
+    my_test_indices: List[int] = []
     if eval_set is not None and client_test_pool is not None and len(client_test_pool) > 0:
         test_pool_targets = mask_targets(eval_set, client_test_pool)
         if partition_method == "iid":
@@ -207,26 +204,69 @@ def build_imagefolder_loaders_for_client(
             mapping_test = dirichlet_partition(test_pool_targets, num_clients, dirichlet_alpha, seed + 999)
         my_test_indices = [client_test_pool[i] for i in mapping_test[client_index]]
 
-    # 组建 DataLoader
+    # 组建 DataLoader（只做B：固定 shuffle 顺序，不改全局seed）
     nw, pm = _decide_loader_runtime(num_workers, pin_memory)
     train_subset = Subset(train_set, my_train_indices)
-    train_loader = DataLoader(train_subset, batch_size=batch_size, shuffle=True, num_workers=nw, pin_memory=pm)
+
+    # 用 client_index & seed 组合出稳定的 DataLoader 随机源，固定 shuffle 顺序
+    dl_seed = (seed + 100003 * client_index) & 0x7FFFFFFF
+    dl_gen = torch.Generator()
+    dl_gen.manual_seed(dl_seed)
+
+    train_loader = DataLoader(
+        train_subset,
+        batch_size=batch_size,
+        shuffle=True,
+        num_workers=nw,
+        pin_memory=pm,
+        generator=dl_gen,  # 关键：固定 DataLoader 的随机打乱
+    )
 
     if len(my_test_indices) > 0:
         test_subset = Subset(eval_set, my_test_indices)
-        test_loader = DataLoader(test_subset, batch_size=batch_size, shuffle=False, num_workers=nw, pin_memory=pm)
+        test_loader = DataLoader(
+            test_subset,
+            batch_size=batch_size,
+            shuffle=False,
+            num_workers=nw,
+            pin_memory=pm
+        )
     else:
-        # 如果没有 val/test，退化为在训练池中再切 10% 做本地 test
+        # 如果没有 val/test，退化为在训练池中再切 10% 做本地 test（可复现）
         tr_idx, te_idx = split_train_test(my_train_indices, test_ratio=0.1, seed=seed + client_index + 123)
         train_subset = Subset(train_set, tr_idx)
         test_subset = Subset(train_set, te_idx)
-        train_loader = DataLoader(train_subset, batch_size=batch_size, shuffle=True, num_workers=nw, pin_memory=pm)
-        test_loader = DataLoader(test_subset, batch_size=batch_size, shuffle=False, num_workers=nw, pin_memory=pm)
+
+        # 退化分支里也固定训练集 shuffle 顺序
+        dl_seed2 = (seed + 100003 * client_index + 1) & 0x7FFFFFFF
+        dl_gen2 = torch.Generator().manual_seed(dl_seed2)
+
+        train_loader = DataLoader(
+            train_subset,
+            batch_size=batch_size,
+            shuffle=True,
+            num_workers=nw,
+            pin_memory=pm,
+            generator=dl_gen2
+        )
+        test_loader = DataLoader(
+            test_subset,
+            batch_size=batch_size,
+            shuffle=False,
+            num_workers=nw,
+            pin_memory=pm
+        )
 
     public_loader = None
     if return_public_loader:
         public_subset = UnlabeledSubset(train_set, public_idx, return_index=return_index_in_public)
-        public_loader = DataLoader(public_subset, batch_size=batch_size, shuffle=False, num_workers=nw, pin_memory=pm)
+        public_loader = DataLoader(
+            public_subset,
+            batch_size=batch_size,
+            shuffle=False,
+            num_workers=nw,
+            pin_memory=pm
+        )
 
     num_classes = len(train_set.classes)
     train_size = len(train_subset)

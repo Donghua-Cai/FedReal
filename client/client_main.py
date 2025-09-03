@@ -13,7 +13,7 @@ from common.dataset import (
 from common.dataset.data_transform import get_transform
 from common.model.create_model import create_model
 from common.serialization import bytes_to_state_dict, state_dict_to_bytes
-from common.utils import setup_logger
+from common.utils import setup_logger, set_seed
 from client.trainer import train_local, evaluate
 
 
@@ -43,6 +43,7 @@ def main():
     parser.add_argument("--seed", type=int, default=42)
     args = parser.parse_args()
 
+    set_seed(args.seed)
     logger = setup_logger(f"Client-{args.client_name}", level=logging.INFO)
 
     # 初次连接，使用默认 128MB；后续按服务端回传的配置调整

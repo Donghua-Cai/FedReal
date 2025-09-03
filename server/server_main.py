@@ -14,8 +14,7 @@ from torchvision import datasets
 
 from proto import fed_pb2, fed_pb2_grpc  # 由 protoc 生成
 from common.config import FedConfig
-from common.utils import setup_logger
-from common.utils import fmt_bytes
+from common.utils import set_seed, setup_logger, fmt_bytes
 from server.aggregator import Aggregator
 
 from common.dataset.data_loader import make_global_loaders
@@ -178,6 +177,7 @@ def main():
     parser.add_argument("--num_workers", type=int, default=None, help="Dataloader workers (None = auto)")
     args = parser.parse_args()
 
+    set_seed(args.seed)
     # 统一初始化命名 logger
     logger = setup_logger("Server", level=logging.INFO)
 
