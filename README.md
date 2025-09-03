@@ -60,3 +60,10 @@ python -m server.server_main   --bind 0.0.0.0:50052   --data_root ./data   --dat
 python -m client.client_main   --server 127.0.0.1:50052   --client_name c0   --data_root ./data   --dataset_name cifar10   --num_clients 2   --partition_method iid   --dirichlet_alpha 0.5   --client_test_ratio 0.1   --batch_size 64
 
 python -m client.client_main   --server 127.0.0.1:50052   --client_name c1   --data_root ./data   --dataset_name cifar10   --num_clients 2   --partition_method iid   --dirichlet_alpha 0.5   --client_test_ratio 0.1   --batch_size 64
+
+
+Dirichlet
+
+python -m server.server_main   --bind 0.0.0.0:50052   --data_root ./data   --dataset_name cifar10   --num_clients 20   --rounds 30   --local_epochs 5   --batch_size 64   --lr 0.01   --momentum 0.9   --partition_method dirichlet   --dirichlet_alpha 0.5   --sample_fraction 1.0   --seed 42   --model_name resnet18   --max_message_mb 128
+
+python -m client.client_main   --server 127.0.0.1:50052   --client_name c0   --data_root ./data   --dataset_name cifar10   --num_clients 20   --partition_method dirichlet   --dirichlet_alpha 0.5   --client_test_ratio 0.1   --batch_size 64
