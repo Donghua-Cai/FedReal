@@ -26,7 +26,8 @@ if _version_not_supported:
 
 
 class FederatedServiceStub(object):
-    """Missing associated documentation comment in .proto file."""
+    """============ 服务接口 ============
+    """
 
     def __init__(self, channel):
         """Constructor.
@@ -44,20 +45,21 @@ class FederatedServiceStub(object):
                 request_serializer=fed__pb2.GetTaskRequest.SerializeToString,
                 response_deserializer=fed__pb2.TaskReply.FromString,
                 _registered_method=True)
-        self.UploadUpdate = channel.unary_unary(
-                '/fed.FederatedService/UploadUpdate',
-                request_serializer=fed__pb2.UploadRequest.SerializeToString,
-                response_deserializer=fed__pb2.UploadReply.FromString,
-                _registered_method=True)
         self.UploadPublicLogits = channel.stream_unary(
                 '/fed.FederatedService/UploadPublicLogits',
                 request_serializer=fed__pb2.PublicLogitsPayload.SerializeToString,
                 response_deserializer=fed__pb2.UploadReply.FromString,
                 _registered_method=True)
+        self.UploadUpdate = channel.unary_unary(
+                '/fed.FederatedService/UploadUpdate',
+                request_serializer=fed__pb2.UploadRequest.SerializeToString,
+                response_deserializer=fed__pb2.UploadReply.FromString,
+                _registered_method=True)
 
 
 class FederatedServiceServicer(object):
-    """Missing associated documentation comment in .proto file."""
+    """============ 服务接口 ============
+    """
 
     def RegisterClient(self, request, context):
         """Missing associated documentation comment in .proto file."""
@@ -71,14 +73,16 @@ class FederatedServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
-    def UploadUpdate(self, request, context):
-        """Missing associated documentation comment in .proto file."""
+    def UploadPublicLogits(self, request_iterator, context):
+        """客户端 -> 服务端：上传公共集 logits（一般只发1个payload，但用流接口保留扩展性）
+        """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
-    def UploadPublicLogits(self, request_iterator, context):
-        """Missing associated documentation comment in .proto file."""
+    def UploadUpdate(self, request, context):
+        """客户端 -> 服务端：KD完成后的ACK（沿用 UploadRequest）
+        """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
@@ -96,14 +100,14 @@ def add_FederatedServiceServicer_to_server(servicer, server):
                     request_deserializer=fed__pb2.GetTaskRequest.FromString,
                     response_serializer=fed__pb2.TaskReply.SerializeToString,
             ),
-            'UploadUpdate': grpc.unary_unary_rpc_method_handler(
-                    servicer.UploadUpdate,
-                    request_deserializer=fed__pb2.UploadRequest.FromString,
-                    response_serializer=fed__pb2.UploadReply.SerializeToString,
-            ),
             'UploadPublicLogits': grpc.stream_unary_rpc_method_handler(
                     servicer.UploadPublicLogits,
                     request_deserializer=fed__pb2.PublicLogitsPayload.FromString,
+                    response_serializer=fed__pb2.UploadReply.SerializeToString,
+            ),
+            'UploadUpdate': grpc.unary_unary_rpc_method_handler(
+                    servicer.UploadUpdate,
+                    request_deserializer=fed__pb2.UploadRequest.FromString,
                     response_serializer=fed__pb2.UploadReply.SerializeToString,
             ),
     }
@@ -115,7 +119,8 @@ def add_FederatedServiceServicer_to_server(servicer, server):
 
  # This class is part of an EXPERIMENTAL API.
 class FederatedService(object):
-    """Missing associated documentation comment in .proto file."""
+    """============ 服务接口 ============
+    """
 
     @staticmethod
     def RegisterClient(request,
@@ -172,33 +177,6 @@ class FederatedService(object):
             _registered_method=True)
 
     @staticmethod
-    def UploadUpdate(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_unary(
-            request,
-            target,
-            '/fed.FederatedService/UploadUpdate',
-            fed__pb2.UploadRequest.SerializeToString,
-            fed__pb2.UploadReply.FromString,
-            options,
-            channel_credentials,
-            insecure,
-            call_credentials,
-            compression,
-            wait_for_ready,
-            timeout,
-            metadata,
-            _registered_method=True)
-
-    @staticmethod
     def UploadPublicLogits(request_iterator,
             target,
             options=(),
@@ -214,6 +192,33 @@ class FederatedService(object):
             target,
             '/fed.FederatedService/UploadPublicLogits',
             fed__pb2.PublicLogitsPayload.SerializeToString,
+            fed__pb2.UploadReply.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def UploadUpdate(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/fed.FederatedService/UploadUpdate',
+            fed__pb2.UploadRequest.SerializeToString,
             fed__pb2.UploadReply.FromString,
             options,
             channel_credentials,

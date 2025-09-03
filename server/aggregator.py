@@ -111,25 +111,33 @@ class Aggregator:
 
     # —— 获取任务 ——
     # server/aggregator.py
-    def get_task(self, client_id: str):
-        # 采样逻辑仍在内部加锁执行
-        self._ensure_sampling()
+    def get_task(self, client_id: str) -> Tuple[int, int, bytes]:
         with self.lock:
-            # 已经到总轮数：不再发模型
-            if self.current_round >= self.cfg.total_rounds:
-                return self.current_round, False, b""
+            # 已完成：任何请求都返回 DONE
+            if self.current_round >= self.cfg.total_rounds or self.phase == fed_pb2.PHASE_DONE:
+                self.phase = fed_pb2.PHASE_DONE
+                return self.current_round, fed_pb2.PHASE_DONE, b""
 
-            # 默认是否参与
-            participate = client_id in self.selected_this_round and self.expected_updates > 0
+            # 强同步：未注册满 -> WAITING（只轮询不训练）
+            if self.require_full and len(self.registered) < self.cfg.num_clients:
+                logger.warning(
+                    f"Round {self.current_round} waiting: "
+                    f"registered={len(self.registered)} < required={self.cfg.num_clients}"
+                )
+                return self.current_round, fed_pb2.PHASE_WAITING, b""
 
-            # 已经提交过更新的客户端，本轮不应再训练也不应再下发模型
-            if client_id in self.completed_this_round:
-                participate = False
-                return self.current_round, False, b""
+            if self.phase == fed_pb2.PHASE_LOCAL_SUP:
+                return self.current_round, fed_pb2.PHASE_LOCAL_SUP, b""
 
-            # 仅在“本轮被采样参与且尚未完成”时下发模型
-            model_bytes = self.global_bytes if participate else b""
-            return self.current_round, participate, model_bytes
+            if self.phase == fed_pb2.PHASE_CLIENT_KD:
+                # 仅首次对该 client 下发 teacher logits
+                if client_id not in self.teacher_sent_to and self.teacher_logits_bytes is not None:
+                    self.teacher_sent_to.add(client_id)
+                    return self.current_round, fed_pb2.PHASE_CLIENT_KD, self.teacher_logits_bytes
+                return self.current_round, fed_pb2.PHASE_CLIENT_KD, b""
+
+        # 兜底
+        return self.current_round, fed_pb2.PHASE_WAITING, b""
 
     # —— 收到更新 ——
     def submit_update(self, client_id: str, round_id: int, local_bytes: bytes, num_samples: int):
@@ -157,52 +165,23 @@ class Aggregator:
             return True
 
     # —— 聚合 ——
-    def _aggregate_and_advance(self):
-        # 将各客户端完整权重做样本数加权平均（仅浮点张量参与加权）
-        state_dicts = []
-        weights = []
-        for b, n in self.received_updates.values():
-            sd = bytes_to_state_dict(b)
-            state_dicts.append(sd)
-            weights.append(float(n))
-        total = sum(weights)
-        if total <= 0:
-            weights = [1.0 for _ in weights]
-            total = len(weights)
+    def _advance_round(self):
+        # 清理本轮缓存
+        self.received_logits.clear()
+        self.kd_acks.clear()
+        self.teacher_logits_bytes = None
+        self.teacher_sent_to.clear()
 
-        # 以第一份的结构为模板
-        template = state_dicts[0]
-        agg = {}
-
-        for k, v in template.items():
-            if v.dtype.is_floating_point:
-                # 浮点：用 float32 做加权求和更稳
-                acc = torch.zeros_like(v, dtype=torch.float32)
-                for sd, w in zip(state_dicts, weights):
-                    acc += sd[k].to(torch.float32) * (w / total)
-                # 回到原始 dtype（通常是 float32，本行等价但更稳健）
-                agg[k] = acc.to(v.dtype)
-            else:
-                # 非浮点：直接取第一份（如 num_batches_tracked 等计数器）
-                agg[k] = v.clone()
-
-        self.model.load_state_dict(agg)
-        self.global_bytes = state_dict_to_bytes(self.model.state_dict())
-
-        # 评测
-        if self.public_test_loader is not None:
-            from .eval import evaluate
-            loss, acc = evaluate(self.model, self.public_test_loader, device=self.device)
-            logger.info(f"[Round {self.current_round}] Global Eval — loss={loss:.4f}, acc={acc:.4f}")
+        next_round = self.current_round + 1
+        if next_round >= self.cfg.total_rounds:
+            # 训练完成：进入 DONE，相位锁死
+            logger.info(f"[Round {self.current_round}] Completed. All {self.cfg.total_rounds} rounds finished.")
+            self.current_round = next_round
+            self.phase = fed_pb2.PHASE_DONE
         else:
-            logger.debug(f"[Round {self.current_round}] Global Eval — skipped (no public_test_loader)")
-
-        # 前进到下一轮
-        self.current_round += 1
-        self.selected_this_round = []
-        self.expected_updates = 0
-        self.received_updates.clear()
-        self.completed_this_round.clear()
+            logger.info(f"[Round {self.current_round}] Completed. Advancing to round {next_round}.")
+            self.current_round = next_round
+            self.phase = fed_pb2.PHASE_LOCAL_SUP
 
     # —— 接收一次性公共 logits —— 
     def accept_public_logits_payload(

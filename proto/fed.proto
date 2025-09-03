@@ -1,91 +1,110 @@
 syntax = "proto3";
 package fed;
 
-// 训练配置（由服务端下发，客户端也会上报用于对齐）
+// ============ 阶段 ============
+enum Phase {
+  PHASE_WAITING   = 0;  // 新增：等待所有 clients 注册或等待进入下一阶段
+  PHASE_LOCAL_SUP = 1; // 客户端：本地监督训练 + 上传公共集logits
+  PHASE_CLIENT_KD = 2; // 客户端：接收server teacher logits，在公共集做KD，然后ACK
+  PHASE_DONE      = 3; // 全部训练完成
+}
+
+// ============ 训练配置 ============
 message TrainingConfig {
   int32 num_clients = 1;
   int32 total_rounds = 2;
+
+  // client 本地监督训练
   int32 local_epochs = 3;
   int32 batch_size = 4;
   float lr = 5;
   float momentum = 6;
+
   string partition_method = 7; // "iid" | "dirichlet"
   float dirichlet_alpha = 8;
   int32 seed = 9;
-  float sample_fraction = 10;   // 每轮采样比例（0~1]
-  string model_name = 11;       // 例如 "resnet18"
-  int32 max_message_mb = 12;    // gRPC 最大消息大小（MB）
+  float sample_fraction = 10;   // 本算法用1.0
 
+  string model_name = 11;       // client 模型名（如 "resnet18"）
+  int32 max_message_mb = 12;    // gRPC 单消息上限（MB）
 
-  optional bool request_public_logits = 30;
-  optional int32 num_public_examples  = 31;
-  optional int32 num_classes          = 32;
+  // KD 相关
+  int32 server_kd_epochs = 20;  // server 在公共集KD训练的epoch
+  int32 client_kd_epochs = 21;  // client 在公共集KD训练的epoch
+  float kd_temperature  = 22;   // T
+  float kd_alpha        = 23;   // KL损权重（总损=CE + kd_alpha * T^2 * KL）
+
+  int32 num_classes     = 24;   // 类别数（server推断写入）
+  int32 public_examples = 25;   // 公共集样本数（server推断写入）
 }
 
-message RegisterRequest {
-  string client_name = 1; // 便于日志定位
-}
+// ============ 注册/任务分发 ============
+message RegisterRequest { string client_name = 1; }
 
 message RegisterReply {
-  string client_id = 1;   // 由服务端分配
-  int32 client_index = 2; // [0, num_clients)
+  string client_id    = 1;   // C000, C001, ...
+  int32  client_index = 2;   // [0, num_clients)
   TrainingConfig config = 3;
 }
 
-message GetTaskRequest {
-  string client_id = 1;
-}
+message GetTaskRequest { string client_id = 1; }
 
 message TaskReply {
-  int32 round = 1;            // 当前轮次
-  bool participate = 2;       // 本轮是否被采样
-  bytes global_model = 3;     // 当前全局模型（state_dict 序列化）
-  TrainingConfig config = 4;  // 冗余携带，确保对齐
+  int32 round = 1;
+  Phase phase = 2;
+
+  // phase==PHASE_CLIENT_KD 时首轮下发的 teacher logits（float32, [N,C] 展平）
+  bytes teacher_logits = 3;
+
+  TrainingConfig config = 4;
 }
 
-message UploadRequest {
-  string client_id = 1;
-  int32 round = 2;
-  bytes local_model = 3;  // 本地训练后的完整权重（简单实现）
-  int64 num_samples = 4;  // 本地训练使用的样本数（用于加权）
-  // 简单指标（可选）
-  double train_loss = 5;
-  double train_acc = 6;
-  double test_loss = 7;
-  double test_acc = 8;
-}
-
-message UploadReply {
-  bool accepted = 1;
-  int32 round = 2; // 服务端当前轮
-}
-
-// 每个 chunk 承载一部分公共数据集的 logits（行优先 row-major）
-// 客户端一次性上传公共集 logits 的负载
+// ============ 上传公共集logits ============
 message PublicLogitsPayload {
   string client_id = 1;
   int32  round     = 2;
 
-  // 行优先 row-major 的 float32 logits: 形状 [N, C] 展平成 bytes
+  // float32 logits（行优先 [N,C] 展平成 bytes）
   bytes  logits    = 10;
 
-  // 对应的公共数据集样本索引（与服务端 public set 对齐）
-  // 若顺序与服务端完全一致且全量，可不填。
+  // （通常不必带，留作扩展）
   repeated int64 indices = 11;
 
-  // 维度信息（用于快速校验）
-  int32  num_classes     = 12;  // C
-  optional int32 total_examples = 13;  // N（可选）
+  int32  num_classes     = 12;        // C
+  optional int32 total_examples = 13; // N
 
-  optional int32 local_train_samples = 14;
+  // 客户端本地训练样本数（用于server加权）
+  optional int64 local_train_samples = 14;
 }
 
+// ============ 通用上传（复用你原项目的定义） ============
+// 用作：KD完成后的 ACK（把 local_model 设为空字节即可）
+message UploadRequest {
+  string client_id = 1;
+  int32  round     = 2;
 
-message Ack { bool ok = 1; string msg = 2; }
+  bytes  local_model = 3; // 本算法中可为空
 
+  int64  num_samples = 4;
+  double train_loss  = 5;
+  double train_acc   = 6;
+  double test_loss   = 7;
+  double test_acc    = 8;
+}
+
+message UploadReply {
+  bool accepted = 1;
+  int32 round   = 2;
+}
+
+// ============ 服务接口 ============
 service FederatedService {
   rpc RegisterClient(RegisterRequest) returns (RegisterReply);
   rpc GetTask(GetTaskRequest) returns (TaskReply);
-  rpc UploadUpdate(UploadRequest) returns (UploadReply);
+
+  // 客户端 -> 服务端：上传公共集 logits（一般只发1个payload，但用流接口保留扩展性）
   rpc UploadPublicLogits (stream PublicLogitsPayload) returns (UploadReply);
+
+  // 客户端 -> 服务端：KD完成后的ACK（沿用 UploadRequest）
+  rpc UploadUpdate(UploadRequest) returns (UploadReply);
 }
