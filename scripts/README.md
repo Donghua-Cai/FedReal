@@ -4,13 +4,13 @@ python scripts/launch.py \
   --server_addr 127.0.0.1:50052 \
   --data_root ./data \
   --dataset_name cifar10 \
-  --rounds 3 \
+  --rounds 30 \
   --local_epochs 5 \
   --batch_size 64 \
   --lr 0.01 \
   --momentum 0.9 \
   --partition_method dirichlet \
-  --dirichlet_alpha 1 \
+  --dirichlet_alpha 0.5 \
   --sample_fraction 1.0 \
   --seed 42 \
   --model_name resnet18 \
