@@ -250,7 +250,7 @@ def main():
             if task.teacher_logits:
                 N = cfg.public_examples
                 C = cfg.num_classes
-                arr = np.frombuffer(task.teacher_logits, dtype=np.float32).copy()  # .copy() 以避免只读警告
+                arr = np.frombuffer(task.teacher_logits, dtype=np.float32).copy()  
                 if arr.size != N * C:
                     logger.error(
                         f"[{client_id}] Bad teacher logits size: {arr.size}, expect {N*C}"

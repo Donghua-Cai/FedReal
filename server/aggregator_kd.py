@@ -7,6 +7,7 @@ import torch
 from torch import nn
 from torch.utils.data import DataLoader
 import torch.nn.functional as F
+import numpy as np
 
 from proto import fed_pb2
 from common.model.create_model import create_model  # 你的 create_model 应该支持 resnet50
@@ -71,7 +72,7 @@ class AggregatorKD:
             return cid, self.client_index[cid]
 
     # ---------- GetTask: 返回当前轮的 phase & 仅在 PHASE_CLIENT_KD 首次下发 teacher logits ----------
-    # server/aggregator_kd.py
+    
     def get_task(self, client_id: str) -> Tuple[int, int, bytes]:
         with self.lock:
             # --- 训练已完成：任何请求都返回 DONE ---
@@ -118,7 +119,6 @@ class AggregatorKD:
                 return False
 
             # 反序列化
-            import numpy as np
             arr = np.frombuffer(logits_bytes, dtype=np.float32).copy()
             if arr.size != (total_examples * num_classes):
                 logger.error(
@@ -203,7 +203,7 @@ class AggregatorKD:
 
             logger.info(
                 f"[ServerKD][Round {self.current_round}] Epoch {ep+1}/{self.cfg.server_kd_epochs} "
-                f"loss={(loss_sum/total):.4f}, acc={(correct/total):.4f}"
+                f"pseudo training loss={(loss_sum/total):.4f}, pseudo training acc={(correct/total):.4f}"
             )
 
         # 4) 生成 teacher logits（由 server 模型出）
@@ -217,7 +217,7 @@ class AggregatorKD:
         out_full = torch.cat(out_logits, dim=0).contiguous()  # [N,C]
         self.teacher_logits_bytes = out_full.numpy().astype("float32").tobytes()
 
-        # 5) （可选）评测 server_test_loader
+        # 5) 评测 server_test_loader
         if self.server_test_loader is not None:
             self._eval_on_server_test()
 
@@ -264,7 +264,7 @@ class AggregatorKD:
 
         next_round = self.current_round + 1
         if next_round >= self.cfg.total_rounds:
-            # 训练完成：进入 DONE，相位锁死
+            # 训练完成：进入 DONE
             logger.info(f"[Round {self.current_round}] Completed. All {self.cfg.total_rounds} rounds finished.")
             self.current_round = next_round  # 让 current_round == total_rounds，避免边界歧义
             self.phase = fed_pb2.PHASE_DONE

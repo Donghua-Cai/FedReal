@@ -13,7 +13,7 @@ from proto import fed_pb2, fed_pb2_grpc
 from common.config import FedConfig
 from common.utils import setup_logger, fmt_bytes
 from common.dataset.data_loader import make_global_loaders
-from common.dataset.data_transform import test_tf_cifar10  # 评测用
+from common.dataset.data_transform import get_transform  # 评测用
 from server.aggregator_kd import AggregatorKD
 
 class FederatedKDService(fed_pb2_grpc.FederatedServiceServicer):
@@ -152,8 +152,7 @@ def main():
     logger = setup_logger("Server", level=logging.INFO)
 
     # 全局 Loader（公共无标签 & 服务器测试）
-    from common.dataset.data_loader import make_global_loaders
-    from common.dataset.data_transform import test_tf_cifar10
+    
     public_unl_loader, server_test_loader = make_global_loaders(
         data_root=args.data_root,
         dataset_name=args.dataset_name,
@@ -161,8 +160,8 @@ def main():
         seed=args.seed,
         public_ratio=0.1,
         server_test_ratio=0.1,
-        train_transform=test_tf_cifar10,  # 公共集不需要数据增强
-        test_transform=test_tf_cifar10,
+        train_transform=get_transform(args.dataset_name, "test"),  # 公共集不需要数据增强
+        test_transform=get_transform(args.dataset_name, "test"),
     )
 
     # 推断 num_classes & public_examples
