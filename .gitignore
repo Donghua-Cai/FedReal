@@ -7,3 +7,4 @@ __pycache__/
 
 /logs/*
 /logs_kd/*
+/logs_kd_cifar100/*
