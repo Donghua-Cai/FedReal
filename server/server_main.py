@@ -107,6 +107,7 @@ class FederatedService(fed_pb2_grpc.FederatedServiceServicer):
 
         ok = self.aggregator.submit_update(
             client_id=request.client_id,
+            group_id=request.group_id,
             round_id=request.round,
             local_bytes=request.local_model,
             num_samples=request.num_samples,

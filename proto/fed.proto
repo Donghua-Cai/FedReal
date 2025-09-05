@@ -53,6 +53,8 @@ message UploadRequest {
   double train_acc = 6;
   double test_loss = 7;
   double test_acc = 8;
+
+  int32 group_id = 15;
 }
 
 message UploadReply {

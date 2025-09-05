@@ -45,6 +45,7 @@ def main():
     parser.add_argument("--num_shards_per_user", type=int, default=15)
     parser.add_argument("--num_classes_per_user", type=int, default=4)
     parser.add_argument("--sample_num_per_shard_test", type=int, default=16)
+    parser.add_argument("--group_num", type=int, default=5)
     args = parser.parse_args()
 
     set_seed(args.seed)
@@ -79,7 +80,7 @@ def main():
 
     # 依据配置构建本地数据加载器（确定性划分）
     # 例如：dataset_name 用 "cifar10"（对应 data/cifar10/train, data/cifar10/test）
-    train_loader, test_loader, public_loader, train_size, num_classes = \
+    train_loader, test_loader, public_loader, train_size, num_classes, group_id = \
         build_imagefolder_loaders_for_client(
             data_root=args.data_root,
             dataset_name=args.dataset_name,
@@ -99,7 +100,10 @@ def main():
             num_shards_per_user=args.num_shards_per_user,
             num_classes_per_user=args.num_classes_per_user,
             sample_num_per_shard_test=args.sample_num_per_shard_test,
+            group_num=args.group_num,
         )
+
+    logger.info(f"[Client {client_id}] group_id={group_id}")
 
     device = torch.device(args.device)
 
@@ -170,6 +174,7 @@ def main():
                 train_acc=train_acc,
                 test_loss=test_loss,
                 test_acc=test_acc,
+                group_id=group_id,
             )
         )
 

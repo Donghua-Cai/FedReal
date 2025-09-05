@@ -137,10 +137,10 @@ class Aggregator:
             return self.current_round, participate, model_bytes
 
     # —— 收到更新 ——
-    def submit_update(self, client_id: str, round_id: int, local_bytes: bytes, num_samples: int):
+    def submit_update(self, client_id: str, group_id: int, round_id: int, local_bytes: bytes, num_samples: int):
         with self.lock:
             logger.info(
-                f"recv from {client_id} for round={round_id} "
+                f"recv from {client_id} (group_id={group_id}) for round={round_id} "
                 f"(curr={self.current_round}), total_received={len(self.received_updates)+1}/{self.expected_updates}"
             )
             # 仅接受当前轮更新
