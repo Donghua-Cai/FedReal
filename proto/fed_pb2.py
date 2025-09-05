@@ -24,31 +24,31 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\tfed.proto\x12\x03\x66\x65\x64\"\xab\x03\n\x0eTrainingConfig\x12\x13\n\x0bnum_clients\x18\x01 \x01(\x05\x12\x14\n\x0ctotal_rounds\x18\x02 \x01(\x05\x12\x14\n\x0clocal_epochs\x18\x03 \x01(\x05\x12\x12\n\nbatch_size\x18\x04 \x01(\x05\x12\n\n\x02lr\x18\x05 \x01(\x02\x12\x10\n\x08momentum\x18\x06 \x01(\x02\x12\x18\n\x10partition_method\x18\x07 \x01(\t\x12\x17\n\x0f\x64irichlet_alpha\x18\x08 \x01(\x02\x12\x0c\n\x04seed\x18\t \x01(\x05\x12\x17\n\x0fsample_fraction\x18\n \x01(\x02\x12\x12\n\nmodel_name\x18\x0b \x01(\t\x12\x16\n\x0emax_message_mb\x18\x0c \x01(\x05\x12\"\n\x15request_public_logits\x18\x1e \x01(\x08H\x00\x88\x01\x01\x12 \n\x13num_public_examples\x18\x1f \x01(\x05H\x01\x88\x01\x01\x12\x18\n\x0bnum_classes\x18  \x01(\x05H\x02\x88\x01\x01\x42\x18\n\x16_request_public_logitsB\x16\n\x14_num_public_examplesB\x0e\n\x0c_num_classes\"&\n\x0fRegisterRequest\x12\x13\n\x0b\x63lient_name\x18\x01 \x01(\t\"]\n\rRegisterReply\x12\x11\n\tclient_id\x18\x01 \x01(\t\x12\x14\n\x0c\x63lient_index\x18\x02 \x01(\x05\x12#\n\x06\x63onfig\x18\x03 \x01(\x0b\x32\x13.fed.TrainingConfig\"#\n\x0eGetTaskRequest\x12\x11\n\tclient_id\x18\x01 \x01(\t\"j\n\tTaskReply\x12\r\n\x05round\x18\x01 \x01(\x05\x12\x13\n\x0bparticipate\x18\x02 \x01(\x08\x12\x14\n\x0cglobal_model\x18\x03 \x01(\x0c\x12#\n\x06\x63onfig\x18\x04 \x01(\x0b\x32\x13.fed.TrainingConfig\"\xb9\x01\n\rUploadRequest\x12\x11\n\tclient_id\x18\x01 \x01(\t\x12\r\n\x05round\x18\x02 \x01(\x05\x12\x13\n\x0blocal_model\x18\x03 \x01(\x0c\x12\x13\n\x0bnum_samples\x18\x04 \x01(\x03\x12\x12\n\ntrain_loss\x18\x05 \x01(\x01\x12\x11\n\ttrain_acc\x18\x06 \x01(\x01\x12\x11\n\ttest_loss\x18\x07 \x01(\x01\x12\x10\n\x08test_acc\x18\x08 \x01(\x01\x12\x10\n\x08group_id\x18\x0f \x01(\x05\".\n\x0bUploadReply\x12\x10\n\x08\x61\x63\x63\x65pted\x18\x01 \x01(\x08\x12\r\n\x05round\x18\x02 \x01(\x05\"\xd7\x01\n\x13PublicLogitsPayload\x12\x11\n\tclient_id\x18\x01 \x01(\t\x12\r\n\x05round\x18\x02 \x01(\x05\x12\x0e\n\x06logits\x18\n \x01(\x0c\x12\x0f\n\x07indices\x18\x0b \x03(\x03\x12\x13\n\x0bnum_classes\x18\x0c \x01(\x05\x12\x1b\n\x0etotal_examples\x18\r \x01(\x05H\x00\x88\x01\x01\x12 \n\x13local_train_samples\x18\x0e \x01(\x05H\x01\x88\x01\x01\x42\x11\n\x0f_total_examplesB\x16\n\x14_local_train_samples\"\x1e\n\x03\x41\x63k\x12\n\n\x02ok\x18\x01 \x01(\x08\x12\x0b\n\x03msg\x18\x02 \x01(\t2\xf8\x01\n\x10\x46\x65\x64\x65ratedService\x12:\n\x0eRegisterClient\x12\x14.fed.RegisterRequest\x1a\x12.fed.RegisterReply\x12.\n\x07GetTask\x12\x13.fed.GetTaskRequest\x1a\x0e.fed.TaskReply\x12\x34\n\x0cUploadUpdate\x12\x12.fed.UploadRequest\x1a\x10.fed.UploadReply\x12\x42\n\x12UploadPublicLogits\x12\x18.fed.PublicLogitsPayload\x1a\x10.fed.UploadReply(\x01\x62\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\tfed.proto\x12\x06\x66\x65\x64new\"\xde\x04\n\x0eTrainingConfig\x12\x13\n\x0bnum_clients\x18\x01 \x01(\x05\x12\x14\n\x0ctotal_rounds\x18\x02 \x01(\x05\x12\x14\n\x0clocal_epochs\x18\x03 \x01(\x05\x12\x12\n\nbatch_size\x18\x04 \x01(\x05\x12\n\n\x02lr\x18\x05 \x01(\x02\x12\x10\n\x08momentum\x18\x06 \x01(\x02\x12\x18\n\x10partition_method\x18\x07 \x01(\t\x12\x17\n\x0f\x64irichlet_alpha\x18\x08 \x01(\x02\x12\x0c\n\x04seed\x18\t \x01(\x05\x12\x17\n\x0fsample_fraction\x18\n \x01(\x02\x12\x12\n\nmodel_name\x18\x0b \x01(\t\x12\x19\n\x11server_model_name\x18\x0c \x01(\t\x12\x16\n\x0emax_message_mb\x18\r \x01(\x05\x12\x18\n\x0bnum_classes\x18\x14 \x01(\x05H\x00\x88\x01\x01\x12\x1c\n\x0fpublic_examples\x18\x15 \x01(\x05H\x01\x88\x01\x01\x12\x1d\n\x10server_kd_epochs\x18\x1e \x01(\x05H\x02\x88\x01\x01\x12\x1d\n\x10\x63lient_kd_epochs\x18\x1f \x01(\x05H\x03\x88\x01\x01\x12\x1b\n\x0ekd_temperature\x18  \x01(\x02H\x04\x88\x01\x01\x12\x15\n\x08kd_alpha\x18! \x01(\x02H\x05\x88\x01\x01\x12\x14\n\x07\x65psilon\x18\" \x01(\x02H\x06\x88\x01\x01\x42\x0e\n\x0c_num_classesB\x12\n\x10_public_examplesB\x13\n\x11_server_kd_epochsB\x13\n\x11_client_kd_epochsB\x11\n\x0f_kd_temperatureB\x0b\n\t_kd_alphaB\n\n\x08_epsilon\"&\n\x0fRegisterRequest\x12\x13\n\x0b\x63lient_name\x18\x01 \x01(\t\"`\n\rRegisterReply\x12\x11\n\tclient_id\x18\x01 \x01(\t\x12\x14\n\x0c\x63lient_index\x18\x02 \x01(\x05\x12&\n\x06\x63onfig\x18\x03 \x01(\x0b\x32\x16.fednew.TrainingConfig\"#\n\x0eGetTaskRequest\x12\x11\n\tclient_id\x18\x01 \x01(\t\"\xa1\x01\n\tTaskReply\x12\r\n\x05round\x18\x01 \x01(\x05\x12\x1c\n\x05phase\x18\x02 \x01(\x0e\x32\r.fednew.Phase\x12\x13\n\x0bparticipate\x18\x03 \x01(\x08\x12\x13\n\x0bgroup_model\x18\x04 \x01(\x0c\x12\x15\n\rserver_logits\x18\x05 \x01(\x0c\x12&\n\x06\x63onfig\x18\n \x01(\x0b\x32\x16.fednew.TrainingConfig\"\xb9\x01\n\rUploadRequest\x12\x11\n\tclient_id\x18\x01 \x01(\t\x12\r\n\x05round\x18\x02 \x01(\x05\x12\x10\n\x08group_id\x18\x03 \x01(\x05\x12\x13\n\x0blocal_model\x18\x04 \x01(\x0c\x12\x13\n\x0bnum_samples\x18\x05 \x01(\x03\x12\x12\n\ntrain_loss\x18\x06 \x01(\x01\x12\x11\n\ttrain_acc\x18\x07 \x01(\x01\x12\x11\n\ttest_loss\x18\x08 \x01(\x01\x12\x10\n\x08test_acc\x18\t \x01(\x01\".\n\x0bUploadReply\x12\x10\n\x08\x61\x63\x63\x65pted\x18\x01 \x01(\x08\x12\r\n\x05round\x18\x02 \x01(\x05\"~\n\x0bGroupLogits\x12\x11\n\tclient_id\x18\x01 \x01(\t\x12\x10\n\x08group_id\x18\x02 \x01(\x05\x12\r\n\x05round\x18\x03 \x01(\x05\x12\x0e\n\x06logits\x18\n \x01(\x0c\x12\x13\n\x0bnum_classes\x18\x0b \x01(\x05\x12\x16\n\x0etotal_examples\x18\x0c \x01(\x05*\x98\x01\n\x05Phase\x12\x11\n\rPHASE_WAITING\x10\x00\x12\x15\n\x11PHASE_LOCAL_TRAIN\x10\x01\x12\x13\n\x0fPHASE_GROUP_AGG\x10\x02\x12\x16\n\x12PHASE_GROUP_LOGITS\x10\x03\x12\x13\n\x0fPHASE_SERVER_KD\x10\x04\x12\x13\n\x0fPHASE_CLIENT_KD\x10\x05\x12\x0e\n\nPHASE_DONE\x10\n2\x85\x02\n\x10\x46\x65\x64\x65ratedService\x12@\n\x0eRegisterClient\x12\x17.fednew.RegisterRequest\x1a\x15.fednew.RegisterReply\x12\x34\n\x07GetTask\x12\x16.fednew.GetTaskRequest\x1a\x11.fednew.TaskReply\x12:\n\x0cUploadUpdate\x12\x15.fednew.UploadRequest\x1a\x13.fednew.UploadReply\x12=\n\x11UploadGroupLogits\x12\x13.fednew.GroupLogits\x1a\x13.fednew.UploadReplyb\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
 _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'fed_pb2', _globals)
 if not _descriptor._USE_C_DESCRIPTORS:
   DESCRIPTOR._loaded_options = None
-  _globals['_TRAININGCONFIG']._serialized_start=19
-  _globals['_TRAININGCONFIG']._serialized_end=446
-  _globals['_REGISTERREQUEST']._serialized_start=448
-  _globals['_REGISTERREQUEST']._serialized_end=486
-  _globals['_REGISTERREPLY']._serialized_start=488
-  _globals['_REGISTERREPLY']._serialized_end=581
-  _globals['_GETTASKREQUEST']._serialized_start=583
-  _globals['_GETTASKREQUEST']._serialized_end=618
-  _globals['_TASKREPLY']._serialized_start=620
-  _globals['_TASKREPLY']._serialized_end=726
-  _globals['_UPLOADREQUEST']._serialized_start=729
-  _globals['_UPLOADREQUEST']._serialized_end=914
-  _globals['_UPLOADREPLY']._serialized_start=916
-  _globals['_UPLOADREPLY']._serialized_end=962
-  _globals['_PUBLICLOGITSPAYLOAD']._serialized_start=965
-  _globals['_PUBLICLOGITSPAYLOAD']._serialized_end=1180
-  _globals['_ACK']._serialized_start=1182
-  _globals['_ACK']._serialized_end=1212
-  _globals['_FEDERATEDSERVICE']._serialized_start=1215
-  _globals['_FEDERATEDSERVICE']._serialized_end=1463
+  _globals['_PHASE']._serialized_start=1334
+  _globals['_PHASE']._serialized_end=1486
+  _globals['_TRAININGCONFIG']._serialized_start=22
+  _globals['_TRAININGCONFIG']._serialized_end=628
+  _globals['_REGISTERREQUEST']._serialized_start=630
+  _globals['_REGISTERREQUEST']._serialized_end=668
+  _globals['_REGISTERREPLY']._serialized_start=670
+  _globals['_REGISTERREPLY']._serialized_end=766
+  _globals['_GETTASKREQUEST']._serialized_start=768
+  _globals['_GETTASKREQUEST']._serialized_end=803
+  _globals['_TASKREPLY']._serialized_start=806
+  _globals['_TASKREPLY']._serialized_end=967
+  _globals['_UPLOADREQUEST']._serialized_start=970
+  _globals['_UPLOADREQUEST']._serialized_end=1155
+  _globals['_UPLOADREPLY']._serialized_start=1157
+  _globals['_UPLOADREPLY']._serialized_end=1203
+  _globals['_GROUPLOGITS']._serialized_start=1205
+  _globals['_GROUPLOGITS']._serialized_end=1331
+  _globals['_FEDERATEDSERVICE']._serialized_start=1489
+  _globals['_FEDERATEDSERVICE']._serialized_end=1750
 # @@protoc_insertion_point(module_scope)

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# scripts/launch_fedreal.py
+# scripts/launch_fednew.py
 import argparse
 import os
 import sys
@@ -18,10 +18,7 @@ def kill_existing():
     ]
     for pat in patterns:
         try:
-            subprocess.run(
-                ["pkill", "-f", pat],
-                check=False,  # 不报错
-            )
+            subprocess.run(["pkill", "-f", pat], check=False)
         except Exception:
             pass
 
@@ -29,32 +26,25 @@ def has_stdbuf() -> bool:
     return shutil.which("stdbuf") is not None
 
 def line_buffer_prefix():
-    # 在 Linux/macOS 上优先用 stdbuf 让日志实时写文件
     return ["stdbuf", "-oL", "-eL"] if has_stdbuf() else []
 
-def make_logs_dir():
-    Path("logs").mkdir(parents=True, exist_ok=True)
+def make_logs_dir(log_dir: str):
+    Path(log_dir).mkdir(parents=True, exist_ok=True)
 
 def ts():
     return datetime.now().strftime("%Y%m%d_%H%M%S")
 
 def launch(cmd, log_path: Path):
     log_f = open(log_path, "w")
-    # 让子进程成为新的进程组，便于整体 kill（Linux/macOS）
     if os.name != "nt":
         return subprocess.Popen(
-            cmd,
-            stdout=log_f,
-            stderr=subprocess.STDOUT,
-            preexec_fn=os.setsid,
-            close_fds=True,
+            cmd, stdout=log_f, stderr=subprocess.STDOUT,
+            preexec_fn=os.setsid, close_fds=True,
         )
     else:
         return subprocess.Popen(
-            cmd,
-            stdout=log_f,
-            stderr=subprocess.STDOUT,
-            creationflags=subprocess.CREATE_NEW_PROCESS_GROUP,  # type: ignore[attr-defined]
+            cmd, stdout=log_f, stderr=subprocess.STDOUT,
+            creationflags=subprocess.CREATE_NEW_PROCESS_GROUP,  # type: ignore
         )
 
 def kill_proc_tree(proc):
@@ -86,6 +76,12 @@ def build_server_cmd(args):
         "--seed", str(args.seed),
         "--model_name", args.model_name,
         "--max_message_mb", str(args.max_message_mb),
+        "--group_num", str(args.group_num),
+        "--server_model", args.server_model,
+        "--server_kd_epochs", str(args.server_kd_epochs),
+        "--client_kd_epochs", str(args.client_kd_epochs),
+        "--kd_temperature", str(args.kd_temperature),
+        "--kd_alpha", str(args.kd_alpha),
     ]
     if args.device:
         cmd += ["--device", args.device]
@@ -108,6 +104,11 @@ def build_client_cmd(args, idx: int):
         "--client_test_ratio", str(args.client_test_ratio),
         "--batch_size", str(args.batch_size),
         "--seed", str(args.seed),
+        "--sample_num_per_shard", str(args.sample_num_per_shard),
+        "--num_shards_per_user", str(args.num_shards_per_user),
+        "--num_classes_per_user", str(args.num_classes_per_user),
+        "--sample_num_per_shard_test", str(args.sample_num_per_shard_test),
+        "--group_num", str(args.group_num),
     ]
     if args.client_device:
         cmd += ["--device", args.client_device]
@@ -116,7 +117,7 @@ def build_client_cmd(args, idx: int):
     return cmd, client_name
 
 def parse_args():
-    p = argparse.ArgumentParser(description="Launch FedReal server and multiple clients")
+    p = argparse.ArgumentParser(description="Launch FedNew server and multiple clients")
     # Topology
     p.add_argument("--num_clients", type=int, default=20)
     # Server config
@@ -130,36 +131,48 @@ def parse_args():
     p.add_argument("--lr", type=float, default=0.01)
     p.add_argument("--momentum", type=float, default=0.9)
     p.add_argument("--partition_method", type=str, default="dirichlet", choices=["iid", "dirichlet", "shards"])
+    p.add_argument("--sample_num_per_shard", type=int, default=60)
+    p.add_argument("--num_shards_per_user", type=int, default=8)
+    p.add_argument("--num_classes_per_user", type=int, default=3)
+    p.add_argument("--sample_num_per_shard_test", type=int, default=12)
     p.add_argument("--dirichlet_alpha", type=float, default=0.5)
     p.add_argument("--sample_fraction", type=float, default=1.0)
-    p.add_argument("--client_test_ratio", type=float, default=0.1, help="Local train/test split ratio on clients")
+    p.add_argument("--client_test_ratio", type=float, default=0.1)
     p.add_argument("--seed", type=int, default=42)
     p.add_argument("--model_name", type=str, default="resnet18")
     p.add_argument("--max_message_mb", type=int, default=128)
-    p.add_argument("--device", type=str, default=None, help="Server device override, e.g., cuda or cpu")
-    p.add_argument("--client_device", type=str, default=None, help="Client device override, e.g., cpu to save GPU")
-    p.add_argument("--num_workers", type=int, default=None, help="DataLoader workers for both server/client (if applicable)")
+    p.add_argument("--device", type=str, default=None, help="Server device")
+    p.add_argument("--client_device", type=str, default=None, help="Client device")
+    p.add_argument("--num_workers", type=int, default=None)
+
+    # FedNew 特有参数
+    p.add_argument("--group_num", type=int, default=5)
+    p.add_argument("--server_model", type=str, default="resnet50")
+    p.add_argument("--server_kd_epochs", type=int, default=3)
+    p.add_argument("--client_kd_epochs", type=int, default=3)
+    p.add_argument("--kd_temperature", type=float, default=1.0)
+    p.add_argument("--kd_alpha", type=float, default=0.5)
 
     # Launch behavior
-    p.add_argument("--stagger_sec", type=float, default=0.2, help="Stagger between client launches")
-    p.add_argument("--server_warmup_sec", type=float, default=2.0, help="Wait before launching clients")
-    p.add_argument("--log_dir", type=str, default="logs")
-    p.add_argument("--env_omp1", action="store_true", help="Set OMP/MKL/OPENBLAS threads to 1 to reduce CPU contention")
-    p.add_argument("--gpu_id", type=int, default=0, help="Use this single GPU for server and all clients")
+    p.add_argument("--stagger_sec", type=float, default=0.2)
+    p.add_argument("--server_warmup_sec", type=float, default=2.0)
+    p.add_argument("--log_dir", type=str, default="logs_fednew")
+    p.add_argument("--env_omp1", action="store_true")
+    p.add_argument("--gpu_id", type=int, default=0, help="Run all server/clients on this single GPU")
 
     return p.parse_args()
 
 def main():
     kill_existing()
     args = parse_args()
-    make_logs_dir()
+    make_logs_dir(args.log_dir)
 
     if args.env_omp1:
         os.environ.setdefault("OMP_NUM_THREADS", "1")
         os.environ.setdefault("MKL_NUM_THREADS", "1")
         os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
 
-    
+    # 强制所有进程用同一块 GPU
     os.environ["CUDA_VISIBLE_DEVICES"] = str(args.gpu_id)
     os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "max_split_size_mb:128,expandable_segments:True")
 
@@ -171,7 +184,6 @@ def main():
     print(" ", f"logs -> {server_log}")
     server_proc = launch(server_cmd, server_log)
 
-    # Optional warmup for server to bind port
     time.sleep(args.server_warmup_sec)
 
     # Clients
@@ -190,17 +202,14 @@ def main():
     print(f"[Launcher] Tail server log: tail -f {server_log}\n")
 
     try:
-        # 等待子进程（在此简单阻塞；如要更复杂的健康检查可自行扩展）
         while True:
             time.sleep(1)
-            # 如果 server 挂了，自动退出（可选）
             if server_proc.poll() is not None:
                 print("[Launcher] Server exited. Terminating clients...")
                 break
     except KeyboardInterrupt:
         print("\n[Launcher] KeyboardInterrupt received. Stopping all processes...")
 
-    # Cleanup
     for p in client_procs:
         kill_proc_tree(p)
     kill_proc_tree(server_proc)

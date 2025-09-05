@@ -1,7 +1,7 @@
 python scripts/launch.py \
   --num_clients 20 \
-  --bind 0.0.0.0:50052 \
-  --server_addr 127.0.0.1:50052 \
+  --bind 0.0.0.0:51052 \
+  --server_addr 127.0.0.1:51052 \
   --data_root ./data \
   --dataset_name cifar10 \
   --rounds 50 \
@@ -9,17 +9,27 @@ python scripts/launch.py \
   --batch_size 64 \
   --lr 0.01 \
   --momentum 0.9 \
-  --partition_method dirichlet \
-  --dirichlet_alpha 200 \
+  --partition_method shards \
+  --sample_num_per_shard 80 \
+  --num_shards_per_user 15 \
+  --num_classes_per_user 4 \
+  --sample_num_per_shard_test 16 \
+  --dirichlet_alpha 0.5 \
   --sample_fraction 1.0 \
+  --client_test_ratio 0.1 \
   --seed 42 \
   --model_name resnet18 \
   --max_message_mb 128 \
-  --server_warmup_sec 2 \
+  --device cuda \
+  --client_device cuda \
+  --group_num 5 \
+  --server_mode resnet50 \
+  --server_kd_epochs 3 \
+  --client_kd_epochs 3 \
+  --kd_temperature 1.0 \
+  --kd_alpha 0.5 \
   --stagger_sec 0.2 \
+  --server_warmup_sec 2.0 \
+  --log_dir logs_new_cifar10 \
   --env_omp1 \
-  --gpu_id 3 \
-  --log_dir logs_cifar100
-
-
-
+  --gpu_id 0

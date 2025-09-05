@@ -26,7 +26,8 @@ if _version_not_supported:
 
 
 class FederatedServiceStub(object):
-    """Missing associated documentation comment in .proto file."""
+    """==== 服务 ====
+    """
 
     def __init__(self, channel):
         """Constructor.
@@ -35,29 +36,30 @@ class FederatedServiceStub(object):
             channel: A grpc.Channel.
         """
         self.RegisterClient = channel.unary_unary(
-                '/fed.FederatedService/RegisterClient',
+                '/fednew.FederatedService/RegisterClient',
                 request_serializer=fed__pb2.RegisterRequest.SerializeToString,
                 response_deserializer=fed__pb2.RegisterReply.FromString,
                 _registered_method=True)
         self.GetTask = channel.unary_unary(
-                '/fed.FederatedService/GetTask',
+                '/fednew.FederatedService/GetTask',
                 request_serializer=fed__pb2.GetTaskRequest.SerializeToString,
                 response_deserializer=fed__pb2.TaskReply.FromString,
                 _registered_method=True)
         self.UploadUpdate = channel.unary_unary(
-                '/fed.FederatedService/UploadUpdate',
+                '/fednew.FederatedService/UploadUpdate',
                 request_serializer=fed__pb2.UploadRequest.SerializeToString,
                 response_deserializer=fed__pb2.UploadReply.FromString,
                 _registered_method=True)
-        self.UploadPublicLogits = channel.stream_unary(
-                '/fed.FederatedService/UploadPublicLogits',
-                request_serializer=fed__pb2.PublicLogitsPayload.SerializeToString,
+        self.UploadGroupLogits = channel.unary_unary(
+                '/fednew.FederatedService/UploadGroupLogits',
+                request_serializer=fed__pb2.GroupLogits.SerializeToString,
                 response_deserializer=fed__pb2.UploadReply.FromString,
                 _registered_method=True)
 
 
 class FederatedServiceServicer(object):
-    """Missing associated documentation comment in .proto file."""
+    """==== 服务 ====
+    """
 
     def RegisterClient(self, request, context):
         """Missing associated documentation comment in .proto file."""
@@ -77,7 +79,7 @@ class FederatedServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
-    def UploadPublicLogits(self, request_iterator, context):
+    def UploadGroupLogits(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -101,21 +103,22 @@ def add_FederatedServiceServicer_to_server(servicer, server):
                     request_deserializer=fed__pb2.UploadRequest.FromString,
                     response_serializer=fed__pb2.UploadReply.SerializeToString,
             ),
-            'UploadPublicLogits': grpc.stream_unary_rpc_method_handler(
-                    servicer.UploadPublicLogits,
-                    request_deserializer=fed__pb2.PublicLogitsPayload.FromString,
+            'UploadGroupLogits': grpc.unary_unary_rpc_method_handler(
+                    servicer.UploadGroupLogits,
+                    request_deserializer=fed__pb2.GroupLogits.FromString,
                     response_serializer=fed__pb2.UploadReply.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
-            'fed.FederatedService', rpc_method_handlers)
+            'fednew.FederatedService', rpc_method_handlers)
     server.add_generic_rpc_handlers((generic_handler,))
-    server.add_registered_method_handlers('fed.FederatedService', rpc_method_handlers)
+    server.add_registered_method_handlers('fednew.FederatedService', rpc_method_handlers)
 
 
  # This class is part of an EXPERIMENTAL API.
 class FederatedService(object):
-    """Missing associated documentation comment in .proto file."""
+    """==== 服务 ====
+    """
 
     @staticmethod
     def RegisterClient(request,
@@ -131,7 +134,7 @@ class FederatedService(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/fed.FederatedService/RegisterClient',
+            '/fednew.FederatedService/RegisterClient',
             fed__pb2.RegisterRequest.SerializeToString,
             fed__pb2.RegisterReply.FromString,
             options,
@@ -158,7 +161,7 @@ class FederatedService(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/fed.FederatedService/GetTask',
+            '/fednew.FederatedService/GetTask',
             fed__pb2.GetTaskRequest.SerializeToString,
             fed__pb2.TaskReply.FromString,
             options,
@@ -185,7 +188,7 @@ class FederatedService(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/fed.FederatedService/UploadUpdate',
+            '/fednew.FederatedService/UploadUpdate',
             fed__pb2.UploadRequest.SerializeToString,
             fed__pb2.UploadReply.FromString,
             options,
@@ -199,7 +202,7 @@ class FederatedService(object):
             _registered_method=True)
 
     @staticmethod
-    def UploadPublicLogits(request_iterator,
+    def UploadGroupLogits(request,
             target,
             options=(),
             channel_credentials=None,
@@ -209,11 +212,11 @@ class FederatedService(object):
             wait_for_ready=None,
             timeout=None,
             metadata=None):
-        return grpc.experimental.stream_unary(
-            request_iterator,
+        return grpc.experimental.unary_unary(
+            request,
             target,
-            '/fed.FederatedService/UploadPublicLogits',
-            fed__pb2.PublicLogitsPayload.SerializeToString,
+            '/fednew.FederatedService/UploadGroupLogits',
+            fed__pb2.GroupLogits.SerializeToString,
             fed__pb2.UploadReply.FromString,
             options,
             channel_credentials,

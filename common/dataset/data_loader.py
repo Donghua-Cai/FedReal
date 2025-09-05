@@ -15,7 +15,7 @@ from .data_partition import (
 from common.dataset.data_transform import get_transform
 
 __all__ = [
-    "make_global_loaders",                 # 服务器：公共无标签 + 服务器测试
+    "make_global_loaders",                 # 服务器：公共无标签 + 服务器测试 (+ 返回公共集真标签)
     "build_imagefolder_loaders_for_client" # 客户端：本地 train/test + （可选）公共无标签
 ]
 
@@ -57,6 +57,12 @@ class UnlabeledSubset(Dataset):
             return img, idx
         return img
 
+# 新增：按给定 indices 抽取标签（确保与 DataLoader 的顺序一致）
+def _labels_for_indices(base_set: datasets.ImageFolder, indices: List[int]) -> torch.LongTensor:
+    all_targets = _targets_from_imagefolder(base_set)  # 与 base_set 索引对齐
+    labels = [int(all_targets[i]) for i in indices]
+    return torch.tensor(labels, dtype=torch.long)
+
 # ---------- 计算“公共/服务器测试/剩余池” ----------
 
 def _compute_global_pools(
@@ -93,7 +99,7 @@ def _compute_global_pools(
 
     return public_indices, server_test_indices, client_train_pool, client_test_pool
 
-# ---------- 服务器端：公共无标签 + 服务器测试 ----------
+# ---------- 服务器端：公共无标签 + 服务器测试（新增返回 public_labels） ----------
 
 def make_global_loaders(
     data_root: str,
@@ -109,9 +115,10 @@ def make_global_loaders(
     return_index_in_public: bool = False,
 ):
     """
-    返回 (public_unlabeled_loader, server_test_loader)
-    - public_unlabeled_loader: 从 train/ 抽取的一份无标签集（所有端可共享）
+    返回 (public_unlabeled_loader, server_test_loader, public_labels)
+    - public_unlabeled_loader: 从 train/ 抽取的一份无标签集（所有端可共享），只返回图像；shuffle=False
     - server_test_loader: 从 val|test/ 抽取的 10% 子集（仅服务器评测用），可能为 None
+    - public_labels: 与 public_unlabeled_loader **顺序严格一致** 的 LongTensor 真标签（供服务器统计伪标签准确率）
     """
     train_dir = os.path.join(data_root, dataset_name, "train")
     eval_dir = _pick_eval_dir(data_root, dataset_name)  # val or test
@@ -123,8 +130,9 @@ def make_global_loaders(
         train_set, eval_set, public_ratio, server_test_ratio, seed
     )
 
-    # 无标签公共集
+    # 无标签公共集（只出图像），并计算与之严格对齐的 labels
     public_subset = UnlabeledSubset(train_set, public_idx, return_index=return_index_in_public)
+    public_labels = _labels_for_indices(train_set, public_idx)  # 与 public_subset 的顺序一致
 
     nw, pm = _decide_loader_runtime(num_workers, pin_memory)
     public_loader = DataLoader(public_subset, batch_size=batch_size, shuffle=False, num_workers=nw, pin_memory=pm)
@@ -134,7 +142,8 @@ def make_global_loaders(
         server_test_subset = Subset(eval_set, server_test_idx)
         server_test_loader = DataLoader(server_test_subset, batch_size=batch_size, shuffle=False, num_workers=nw, pin_memory=pm)
 
-    return public_loader, server_test_loader
+    # ←←← 这里与原实现唯一不同：多返回 public_labels
+    return public_loader, server_test_loader, public_labels
 
 # ---------- 客户端：在“剩余池”上继续按 IID/Dirichlet/Shards 划分 ----------
 
@@ -155,7 +164,7 @@ def build_imagefolder_loaders_for_client(
     server_test_ratio: float = 0.1,
     return_public_loader: bool = True,
     return_index_in_public: bool = False,
-    # —— shards 相关参数（仅在 partition_method == "shards" 时生效）——
+    # —— shards 相关参数（仅在partition_method == "shards"时生效）——
     sample_num_per_shard: int = 60,
     num_shards_per_user: int = 8,
     num_classes_per_user: int = 3,
@@ -170,8 +179,9 @@ def build_imagefolder_loaders_for_client(
     train_dir = os.path.join(data_root, dataset_name, "train")
     eval_dir  = _pick_eval_dir(data_root, dataset_name)
 
-    train_set = datasets.ImageFolder(train_dir, transform=train_transform or train_tf_cifar10)
-    eval_set  = datasets.ImageFolder(eval_dir, transform=test_transform or test_tf_cifar10) if eval_dir else None
+    # 这里保持你原有的 transform 逻辑；如需替换为 get_transform 可自行调整
+    train_set = datasets.ImageFolder(train_dir, transform=train_transform or get_transform(dataset_name, "train"))
+    eval_set  = datasets.ImageFolder(eval_dir, transform=test_transform or get_transform(dataset_name, "test")) if eval_dir else None
 
     # 计算全局池
     public_idx, server_test_idx, client_train_pool, client_test_pool = _compute_global_pools(
@@ -188,8 +198,7 @@ def build_imagefolder_loaders_for_client(
         # —— 准备 shards 所需参数 —— #
         train_targets = mask_targets(train_set, client_train_pool)
         if eval_set is None or client_test_pool is None or len(client_test_pool) == 0:
-            # 没有单独的 eval 集合时，用训练池里切出 test_shard（你也可以按需调整为 None）
-            test_targets = train_targets  # 退化：同源，仅用于 shard 切片形状
+            test_targets = train_targets  # 退化
         else:
             test_targets = mask_targets(eval_set, client_test_pool)
 
@@ -212,7 +221,6 @@ def build_imagefolder_loaders_for_client(
         if eval_set is not None and client_test_pool is not None and len(client_test_pool) > 0:
             my_test_indices  = [client_test_pool[i]  for i in dict_users_test[client_index]]
         else:
-            # 若无独立 eval_set，则仍回落到对 my_train_indices 再切 test
             my_test_indices = []
 
         group_id = int(group_map[client_index])
