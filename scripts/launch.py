@@ -129,7 +129,7 @@ def parse_args():
     p.add_argument("--batch_size", type=int, default=64)
     p.add_argument("--lr", type=float, default=0.01)
     p.add_argument("--momentum", type=float, default=0.9)
-    p.add_argument("--partition_method", type=str, default="dirichlet", choices=["iid", "dirichlet"])
+    p.add_argument("--partition_method", type=str, default="dirichlet", choices=["iid", "dirichlet", "shards"])
     p.add_argument("--dirichlet_alpha", type=float, default=0.5)
     p.add_argument("--sample_fraction", type=float, default=1.0)
     p.add_argument("--client_test_ratio", type=float, default=0.1, help="Local train/test split ratio on clients")

@@ -181,11 +181,9 @@ class Aggregator:
 
         for k, v in template.items():
             if v.dtype.is_floating_point:
-                # 浮点：用 float32 做加权求和更稳
                 acc = torch.zeros_like(v, dtype=torch.float32)
                 for sd, w in zip(state_dicts, weights):
                     acc += sd[k].to(torch.float32) * (w / total)
-                # 回到原始 dtype（通常是 float32，本行等价但更稳健）
                 agg[k] = acc.to(v.dtype)
             else:
                 # 非浮点：直接取第一份（如 num_batches_tracked 等计数器）

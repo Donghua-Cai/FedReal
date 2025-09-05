@@ -72,8 +72,7 @@ class FederatedService(fed_pb2_grpc.FederatedServiceServicer):
 
         # 首轮真正开始计时
         if self.start_time is None and round_id < self.cfg.total_rounds and self.aggregator.expected_updates > 0:
-            import time as _t
-            self.start_time = _t.time()
+            self.start_time = time.time()
             self.logger.info("Training timer started.")
 
         # ✅ 只有在确实要下发（global_bytes 非空）时才打印/统计
@@ -92,7 +91,7 @@ class FederatedService(fed_pb2_grpc.FederatedServiceServicer):
         return fed_pb2.TaskReply(
             round=round_id,
             participate=participate,
-            global_model=global_bytes,  # 可能是空字节
+            global_model=global_bytes,  # 可能是空字节，在aggregator里写死了判断逻辑
             config=self._cfg_to_proto(),
         )
 
@@ -168,7 +167,7 @@ def main():
     parser.add_argument("--batch_size", type=int, default=64)
     parser.add_argument("--lr", type=float, default=0.01)
     parser.add_argument("--momentum", type=float, default=0.9)
-    parser.add_argument("--partition_method", type=str, default="iid", choices=["iid", "dirichlet"])
+    parser.add_argument("--partition_method", type=str, default="iid", choices=["iid", "dirichlet", "shards"])
     parser.add_argument("--dirichlet_alpha", type=float, default=0.1)
     parser.add_argument("--sample_fraction", type=float, default=1.0)
     parser.add_argument("--seed", type=int, default=42)

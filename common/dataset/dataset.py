@@ -6,21 +6,6 @@ import torch
 from torch.utils.data import DataLoader, Subset
 from torchvision import datasets, transforms
 
-
-# —— CIFAR-10 预处理 ——
-TRAIN_TRANSFORM = transforms.Compose([
-    transforms.RandomCrop(32, padding=4),
-    transforms.RandomHorizontalFlip(),
-    transforms.ToTensor(),
-    transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
-])
-
-TEST_TRANSFORM = transforms.Compose([
-    transforms.ToTensor(),
-    transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
-])
-
-
 def _class_indices(targets: List[int], num_classes: int = 10) -> List[List[int]]:
     per_class = [[] for _ in range(num_classes)]
     for idx, y in enumerate(targets):

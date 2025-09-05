@@ -31,7 +31,7 @@ def main():
                         help="Dataset name under data/, e.g., cifar10, nwpu, dota")
     parser.add_argument("--num_clients", type=int, default=3)
     parser.add_argument("--partition_method", type=str, default="iid",
-                        choices=["iid", "dirichlet"])
+                        choices=["iid", "dirichlet", "shards"])
     parser.add_argument("--dirichlet_alpha", type=float, default=0.1,
                         help="Dirichlet alpha for non-IID partition")
     parser.add_argument("--client_test_ratio", type=float, default=0.1,
@@ -41,6 +41,10 @@ def main():
     parser.add_argument("--batch_size", type=int, default=64,
                         help="Batch size")
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--sample_num_per_shard", type=int, default=80)
+    parser.add_argument("--num_shards_per_user", type=int, default=15)
+    parser.add_argument("--num_classes_per_user", type=int, default=4)
+    parser.add_argument("--sample_num_per_shard_test", type=int, default=16)
     args = parser.parse_args()
 
     set_seed(args.seed)
@@ -65,6 +69,14 @@ def main():
 
     logger.info(f"[Client {client_id}] index={client_index}; device={args.device}")
 
+    logger.info(
+        f"[{client_id}] shards cfg: method={args.partition_method}, "
+        f"num_shards_per_user={args.num_shards_per_user}, "
+        f"sample_num_per_shard={args.sample_num_per_shard}, "
+        f"num_classes_per_user={args.num_classes_per_user}, "
+        f"sample_num_per_shard_test={args.sample_num_per_shard_test}"
+    )
+
     # 依据配置构建本地数据加载器（确定性划分）
     # 例如：dataset_name 用 "cifar10"（对应 data/cifar10/train, data/cifar10/test）
     train_loader, test_loader, public_loader, train_size, num_classes = \
@@ -83,6 +95,10 @@ def main():
             server_test_ratio=0.1,
             return_public_loader=True,           # 如暂时不用公共集，可设为 False
             return_index_in_public=False,
+            sample_num_per_shard=args.sample_num_per_shard,
+            num_shards_per_user=args.num_shards_per_user,
+            num_classes_per_user=args.num_classes_per_user,
+            sample_num_per_shard_test=args.sample_num_per_shard_test,
         )
 
     device = torch.device(args.device)
