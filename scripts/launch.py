@@ -145,6 +145,7 @@ def parse_args():
     p.add_argument("--server_warmup_sec", type=float, default=2.0, help="Wait before launching clients")
     p.add_argument("--log_dir", type=str, default="logs")
     p.add_argument("--env_omp1", action="store_true", help="Set OMP/MKL/OPENBLAS threads to 1 to reduce CPU contention")
+    p.add_argument("--gpu_id", type=int, default=0, help="Use this single GPU for server and all clients")
 
     return p.parse_args()
 
@@ -157,6 +158,10 @@ def main():
         os.environ.setdefault("OMP_NUM_THREADS", "1")
         os.environ.setdefault("MKL_NUM_THREADS", "1")
         os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
+
+    
+    os.environ["CUDA_VISIBLE_DEVICES"] = str(args.gpu_id)
+    os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "max_split_size_mb:128,expandable_segments:True")
 
     # Server
     server_cmd = build_server_cmd(args)

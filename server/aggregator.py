@@ -9,6 +9,8 @@ from common.serialization import bytes_to_state_dict, state_dict_to_bytes
 from common.model.create_model import create_model
 from common.utils import select_clients
 
+from .eval import evaluate
+
 # 使用与 server_main.py 同一命名空间的子 logger，继承其 handler/level
 logger = logging.getLogger("Server").getChild("Aggregator")
 
@@ -39,6 +41,9 @@ class Aggregator:
         # 一次性公共 logits 暂存
         # {(round, client_id): (indices(list|None), logits_bytes(bytes), num_classes(int), total_examples(int|None))}
         self.public_logits_payloads: Dict[Tuple[int, str], Tuple[Optional[List[int]], bytes, int, Optional[int]]] = {}
+
+        self.server_eval_acc = []
+        self.server_eval_loss = []
 
     # —— 注册 ——
     def register(self, client_name: str) -> Tuple[str, int]:
@@ -191,9 +196,10 @@ class Aggregator:
 
         # 评测
         if self.public_test_loader is not None:
-            from .eval import evaluate
             loss, acc = evaluate(self.model, self.public_test_loader, device=self.device)
             logger.info(f"[Round {self.current_round}] Global Eval — loss={loss:.4f}, acc={acc:.4f}")
+            self.server_eval_acc.append(acc)
+            self.server_eval_loss.append(loss)
         else:
             logger.debug(f"[Round {self.current_round}] Global Eval — skipped (no public_test_loader)")
 

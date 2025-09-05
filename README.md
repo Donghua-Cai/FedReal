@@ -55,7 +55,7 @@ python -m client.client_main \
   --client_test_ratio 0.1 \
   --batch_size 64
 
-python -m server.server_main   --bind 0.0.0.0:50052   --data_root ./data   --dataset_name cifar10   --num_clients 2   --rounds 3   --local_epochs 5   --batch_size 64   --lr 0.01   --momentum 0.9   --partition_method iid   --dirichlet_alpha 0.5   --sample_fraction 1.0   --seed 42   --model_name resnet18   --max_message_mb 128
+python -m server.server_main   --bind 0.0.0.0:50052   --data_root ./data   --dataset_name cifar10   --num_clients 2   --rounds 3   --local_epochs 2   --batch_size 64   --lr 0.01   --momentum 0.9   --partition_method iid   --dirichlet_alpha 0.5   --sample_fraction 1.0   --seed 42   --model_name resnet18   --max_message_mb 128
 
 python -m client.client_main   --server 127.0.0.1:50052   --client_name c0   --data_root ./data   --dataset_name cifar10   --num_clients 2   --partition_method iid   --dirichlet_alpha 0.5   --client_test_ratio 0.1   --batch_size 64
 
@@ -64,6 +64,25 @@ python -m client.client_main   --server 127.0.0.1:50052   --client_name c1   --d
 
 Dirichlet
 
-python -m server.server_main   --bind 0.0.0.0:50052   --data_root ./data   --dataset_name cifar10   --num_clients 20   --rounds 30   --local_epochs 5   --batch_size 64   --lr 0.01   --momentum 0.9   --partition_method dirichlet   --dirichlet_alpha 0.5   --sample_fraction 1.0   --seed 42   --model_name resnet18   --max_message_mb 128
+python -m server.server_main   --bind 0.0.0.0:50052   --data_root ./data   --dataset_name cifar10   --num_clients 2   --rounds 3   --local_epochs 5   --batch_size 64   --lr 0.01   --momentum 0.9   --partition_method dirichlet   --dirichlet_alpha 0.5   --sample_fraction 1.0   --seed 42   --model_name resnet18   --max_message_mb 128
 
-python -m client.client_main   --server 127.0.0.1:50052   --client_name c0   --data_root ./data   --dataset_name cifar10   --num_clients 20   --partition_method dirichlet   --dirichlet_alpha 0.5   --client_test_ratio 0.1   --batch_size 64
+python -m client.client_main   --server 127.0.0.1:50052   --client_name c0   --data_root ./data   --dataset_name cifar10   --num_clients 2   --partition_method dirichlet   --dirichlet_alpha 0.5   --client_test_ratio 0.1   --batch_size 64
+
+python -m client.client_main   --server 127.0.0.1:50052   --client_name c1   --data_root ./data   --dataset_name cifar10   --num_clients 2   --partition_method dirichlet   --dirichlet_alpha 0.5   --client_test_ratio 0.1   --batch_size 64
+
+
+Label distribution: {7: 3582, 3: 1326, 4: 1698, 2: 1960, 5: 445, 8: 806, 1: 1491, 6: 1658, 0: 511, 9: 90}
+
+Label distribution: {2: 2555, 0: 4024, 3: 3174, 5: 4033, 9: 4398, 1: 2988, 6: 2830, 8: 3705, 4: 2787, 7: 939}
+
+
+2025-09-04 16:53:43 [INFO] Server: Server total acc : [0.351, 0.736, 0.752]
+2025-09-04 16:53:43 [INFO] Server: Server total loss : [1.7694936513900756, 0.7867589998245239, 0.738979609489441]
+
+
+2025-09-04 16:53:42 [INFO] Client-c0: [Client C000] total acc : [0.5527934392619169, 0.6158380317785751, 0.7091235263967196]
+2025-09-04 16:53:42 [INFO] Client-c0: [Client C000] total loss : [1.2718044392944055, 1.1273983765235014, 0.8592933611586301]
+
+
+2025-09-04 16:53:43 [INFO] Client-c1: [Client C001] total acc : [0.6412318556296587, 0.6834052569635151, 0.7326402510788544]
+2025-09-04 16:53:43 [INFO] Client-c1: [Client C001] total loss : [1.1695440298859023, 0.9748998435397577, 0.7859127272480186]

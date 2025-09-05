@@ -96,6 +96,9 @@ def main():
                 f"train_size={train_size}, test_size={len(test_loader.dataset)}")
     logger.info(f"[Client {client_id}] Label distribution: {dict(label_dist)}")
 
+    client_eval_acc = []
+    client_eval_loss = []
+
     # 主循环
     uploaded_round = set()
     last_round = -1
@@ -113,6 +116,8 @@ def main():
                 elapsed = end_time - start_time
                 logger.info(f"[Client {client_id}] Total training time: {elapsed:.2f}s "
                             f"({elapsed/60:.2f} min)")
+                logger.info(f"[Client {client_id}] total acc : {client_eval_acc}")
+                logger.info(f"[Client {client_id}] total loss : {client_eval_loss}")
             break
 
         if task.round != last_round:
@@ -133,6 +138,9 @@ def main():
         train_loss, train_acc = train_local(model, train_loader, epochs=task.config.local_epochs, optimizer=optimizer, device=device)
         test_loss, test_acc = evaluate(model, test_loader, device=device)
         logger.info(f"[Client {client_id}][Round {task.round}] train_acc={train_acc:.4f}, test_acc={test_acc:.4f}")
+
+        client_eval_acc.append(test_acc)
+        client_eval_loss.append(test_loss)
 
         # 回传完整模型（简单实现）
         local_bytes = state_dict_to_bytes(model.state_dict())

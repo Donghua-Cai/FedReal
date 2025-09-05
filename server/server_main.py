@@ -27,6 +27,7 @@ class FederatedService(fed_pb2_grpc.FederatedServiceServicer):
         self.logger = logging.getLogger("Server")
         self.start_time = None
         self.end_time = None
+        
 
         self._byte_lock = threading.Lock()
         # 总量
@@ -243,6 +244,12 @@ def main():
 
     server.add_insecure_port(args.bind)
     server.start()
+    logger.info(f"Current setting:")
+    logger.info(f" - dataset : {args.dataset_name}")
+    logger.info(f" - partition : {args.partition_method}")
+    logger.info(f" - dirichlet alpha : {args.dirichlet_alpha}")
+    logger.info(f" - clients number : {args.num_clients}")
+    logger.info(f" - local epochs : {args.local_epochs}")
     logger.info(f"Listening on {args.bind}; device={args.device}")
 
     # 只打印一次“完成”
@@ -280,6 +287,8 @@ def main():
                     for cid, v in service.bytes_up_logits_by_client.items():
                         logger.info(f"[Traffic Detail] {cid} up_logits={fmt_bytes(v)}")
                     printed_done = True
+                    logger.info(f"Server total acc : {service.aggregator.server_eval_acc}")
+                    logger.info(f"Server total loss : {service.aggregator.server_eval_loss}")
                     print("Press Ctrl-C to exit")
     except KeyboardInterrupt:
         pass
