@@ -7,3 +7,6 @@ __pycache__/
 
 /logs/*
 /logs_cifar100/*
+/logs_new_cifar10/*
+/logs_new_cifar100/*
+
