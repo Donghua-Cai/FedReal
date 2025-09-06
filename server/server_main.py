@@ -175,6 +175,8 @@ def main():
     parser.add_argument("--max_message_mb", type=int, default=128)
     parser.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu")
     # KD
+    parser.add_argument("--kd_period", type=int, default=5)
+    parser.add_argument("--kd_offset", type=int, default=1)
     parser.add_argument("--server_kd_epochs", type=int, default=3)
     parser.add_argument("--client_kd_epochs", type=int, default=3)
     parser.add_argument("--kd_temperature", type=float, default=1.0)
@@ -231,6 +233,8 @@ def main():
     cfg.client_kd_epochs = args.client_kd_epochs
     cfg.kd_temperature = args.kd_temperature
     cfg.kd_alpha = args.kd_alpha
+    cfg.kd_period = args.kd_period  
+    cfg.kd_offset = args.kd_offset
 
     service = FederatedService(cfg, public_unl_loader, server_test_loader, public_labels, device=args.device)
 

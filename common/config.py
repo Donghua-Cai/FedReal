@@ -35,6 +35,8 @@ class FedConfig:
     client_kd_epochs: int = 3
     kd_temperature: float = 1.0
     kd_alpha: float = 0.5             # L = (1-α) * CE + α * KL
+    kd_period: int = 5
+    kd_offset: int = 1
 
     def to_dict(self):
         return asdict(self)

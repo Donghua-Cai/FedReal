@@ -10,10 +10,10 @@ python scripts/launch.py \
   --lr 0.01 \
   --momentum 0.9 \
   --partition_method shards \
-  --sample_num_per_shard 80 \
-  --num_shards_per_user 15 \
+  --sample_num_per_shard 15 \
+  --num_shards_per_user 80 \
   --num_classes_per_user 4 \
-  --sample_num_per_shard_test 16 \
+  --sample_num_per_shard_test 3 \
   --dirichlet_alpha 0.5 \
   --sample_fraction 1.0 \
   --client_test_ratio 0.1 \

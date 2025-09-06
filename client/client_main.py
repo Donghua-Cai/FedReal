@@ -156,8 +156,16 @@ def main():
         my_idx = train_loader.dataset.indices
         my_labels = [all_labels[i] for i in my_idx]
         label_dist = collections.Counter(my_labels)
+
+        base_ds_test = test_loader.dataset.dataset
+        all_labels_test = [y for _, y in base_ds_test.samples]
+        my_idx_test = test_loader.dataset.indices
+        my_labels_test = [all_labels_test[i] for i in my_idx_test]
+        label_dist_test = collections.Counter(my_labels_test)
+
         logger.info(f"[{client_id}] Data allocation: train_size={len(my_idx)}, test_size={len(test_loader.dataset)}")
-        logger.info(f"[{client_id}] Label distribution: {dict(label_dist)}")
+        logger.info(f"[{client_id}] Train label distribution: {dict(label_dist)}")
+        logger.info(f"[{client_id}] Test label distribution: {dict(label_dist_test)}")
     except Exception:
         # 兜底（有些自定义数据集可能没有 .samples）
         logger.info(f"[{client_id}] Data allocation: train_size={train_size}, test_size={len(test_loader.dataset)}")
