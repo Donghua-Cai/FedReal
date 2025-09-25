@@ -38,10 +38,8 @@ class Aggregator:
         # 强同步：必须所有 num_clients 都训练完才进入下一轮
         self.require_full = True
 
-        # 一次性公共 logits 暂存
-        # {(round, client_id): (indices(list|None), logits_bytes(bytes), num_classes(int), total_examples(int|None))}
-        self.public_logits_payloads: Dict[Tuple[int, str], Tuple[Optional[List[int]], bytes, int, Optional[int]]] = {}
-
+        self.client_test_acc = []
+        self.client_average_test_acc = []
         self.server_eval_acc = []
         self.server_eval_loss = []
 
@@ -137,7 +135,7 @@ class Aggregator:
             return self.current_round, participate, model_bytes
 
     # —— 收到更新 ——
-    def submit_update(self, client_id: str, group_id: int, round_id: int, local_bytes: bytes, num_samples: int):
+    def submit_update(self, client_id: str, group_id: int, round_id: int, local_bytes: bytes, num_samples: int, test_acc):
         with self.lock:
             logger.info(
                 f"recv from {client_id} (group_id={group_id}) for round={round_id} "
@@ -156,6 +154,7 @@ class Aggregator:
 
             self.received_updates[client_id] = (local_bytes, num_samples)
             self.completed_this_round.add(client_id)
+            self.client_test_acc.append(test_acc)
 
             if len(self.received_updates) >= self.expected_updates:
                 self._aggregate_and_advance()
@@ -179,6 +178,7 @@ class Aggregator:
         template = state_dicts[0]
         agg = {}
 
+        logger.info("Starting aggregation")
         for k, v in template.items():
             if v.dtype.is_floating_point:
                 acc = torch.zeros_like(v, dtype=torch.float32)
@@ -192,6 +192,7 @@ class Aggregator:
         self.model.load_state_dict(agg)
         self.global_bytes = state_dict_to_bytes(self.model.state_dict())
 
+        logger.info("Aggregation finished, now evaluating...")
         # 评测
         if self.public_test_loader is not None:
             loss, acc = evaluate(self.model, self.public_test_loader, device=self.device)
@@ -199,7 +200,12 @@ class Aggregator:
             self.server_eval_acc.append(acc)
             self.server_eval_loss.append(loss)
         else:
+            logger.info("failed")
             logger.debug(f"[Round {self.current_round}] Global Eval — skipped (no public_test_loader)")
+        logger.info("Evaluation finished")
+
+        avg_acc = sum(self.client_test_acc) / len(self.client_test_acc)
+        self.client_average_test_acc.append(avg_acc)
 
         # 前进到下一轮
         self.current_round += 1
@@ -207,30 +213,6 @@ class Aggregator:
         self.expected_updates = 0
         self.received_updates.clear()
         self.completed_this_round.clear()
+        self.client_test_acc = []
 
-    # —— 接收一次性公共 logits —— 
-    def accept_public_logits_payload(
-        self,
-        client_id: str,
-        round_id: int,
-        logits_bytes: bytes,
-        indices: list[int] | None,
-        num_classes: int,
-        total_examples: int | None,
-        local_train_samples: int | None,   # ✅ 新增
-    ):
-        key = (round_id, client_id)
-        if not hasattr(self, "public_logits_payloads"):
-            self.public_logits_payloads = {}
-        self.public_logits_payloads[key] = {
-            "indices": indices,
-            "logits_bytes": logits_bytes,
-            "num_classes": num_classes,
-            "total_examples": total_examples,
-            "local_train_samples": local_train_samples,  # ✅ 存起来
-        }
-        logger.info(
-            f"[Server] cached public logits from {client_id} (round={round_id}), "
-            f"bytes={len(logits_bytes)}, num_classes={num_classes}, "
-            f"local_train_samples={local_train_samples}"
-        )
+    

@@ -2,15 +2,14 @@ python scripts/launch.py \
   --num_clients 20 \
   --bind 0.0.0.0:50052 \
   --server_addr 127.0.0.1:50052 \
-  --data_root ./data \
-  --dataset_name cifar10 \
+  --data_root ./dataset \
+  --dataset_name Cifar10 \
+  --num_classes 10 \
   --rounds 50 \
   --local_epochs 5 \
   --batch_size 64 \
   --lr 0.01 \
   --momentum 0.9 \
-  --partition_method dirichlet \
-  --dirichlet_alpha 200 \
   --sample_fraction 1.0 \
   --seed 42 \
   --model_name resnet18 \
@@ -19,7 +18,7 @@ python scripts/launch.py \
   --stagger_sec 0.2 \
   --env_omp1 \
   --gpu_id 3 \
-  --log_dir logs_cifar100
+  --log_dir logs
 
 
 

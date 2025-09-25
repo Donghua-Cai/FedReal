@@ -74,14 +74,13 @@ def build_server_cmd(args):
         "--bind", args.bind,
         "--data_root", args.data_root,
         "--dataset_name", args.dataset_name,
+        "--num_classes", str(args.num_classes),
         "--num_clients", str(args.num_clients),
         "--rounds", str(args.rounds),
         "--local_epochs", str(args.local_epochs),
         "--batch_size", str(args.batch_size),
         "--lr", str(args.lr),
         "--momentum", str(args.momentum),
-        "--partition_method", args.partition_method,
-        "--dirichlet_alpha", str(args.dirichlet_alpha),
         "--sample_fraction", str(args.sample_fraction),
         "--seed", str(args.seed),
         "--model_name", args.model_name,
@@ -102,10 +101,8 @@ def build_client_cmd(args, idx: int):
         "--client_name", client_name,
         "--data_root", args.data_root,
         "--dataset_name", args.dataset_name,
+        "--num_classes", str(args.num_classes),
         "--num_clients", str(args.num_clients),
-        "--partition_method", args.partition_method,
-        "--dirichlet_alpha", str(args.dirichlet_alpha),
-        "--client_test_ratio", str(args.client_test_ratio),
         "--batch_size", str(args.batch_size),
         "--seed", str(args.seed),
     ]
@@ -122,17 +119,15 @@ def parse_args():
     # Server config
     p.add_argument("--bind", type=str, default="0.0.0.0:50052")
     p.add_argument("--server_addr", type=str, default="127.0.0.1:50052")
-    p.add_argument("--data_root", type=str, default="./data")
-    p.add_argument("--dataset_name", type=str, default="cifar10")
+    p.add_argument("--data_root", type=str, default="./dataset")
+    p.add_argument("--dataset_name", type=str, default="Cifar10", choices=["Cifar10", "Cifar100", "NWPU-RESISC45", "DOTA"])
+    p.add_argument("--num_classes", type=int)
     p.add_argument("--rounds", type=int, default=30)
     p.add_argument("--local_epochs", type=int, default=5)
     p.add_argument("--batch_size", type=int, default=64)
     p.add_argument("--lr", type=float, default=0.01)
     p.add_argument("--momentum", type=float, default=0.9)
-    p.add_argument("--partition_method", type=str, default="dirichlet", choices=["iid", "dirichlet", "shards"])
-    p.add_argument("--dirichlet_alpha", type=float, default=0.5)
     p.add_argument("--sample_fraction", type=float, default=1.0)
-    p.add_argument("--client_test_ratio", type=float, default=0.1, help="Local train/test split ratio on clients")
     p.add_argument("--seed", type=int, default=42)
     p.add_argument("--model_name", type=str, default="resnet18")
     p.add_argument("--max_message_mb", type=int, default=128)

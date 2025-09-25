@@ -49,11 +49,6 @@ class FederatedServiceStub(object):
                 request_serializer=fed__pb2.UploadRequest.SerializeToString,
                 response_deserializer=fed__pb2.UploadReply.FromString,
                 _registered_method=True)
-        self.UploadPublicLogits = channel.stream_unary(
-                '/fed.FederatedService/UploadPublicLogits',
-                request_serializer=fed__pb2.PublicLogitsPayload.SerializeToString,
-                response_deserializer=fed__pb2.UploadReply.FromString,
-                _registered_method=True)
 
 
 class FederatedServiceServicer(object):
@@ -77,12 +72,6 @@ class FederatedServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
-    def UploadPublicLogits(self, request_iterator, context):
-        """Missing associated documentation comment in .proto file."""
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
 
 def add_FederatedServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -99,11 +88,6 @@ def add_FederatedServiceServicer_to_server(servicer, server):
             'UploadUpdate': grpc.unary_unary_rpc_method_handler(
                     servicer.UploadUpdate,
                     request_deserializer=fed__pb2.UploadRequest.FromString,
-                    response_serializer=fed__pb2.UploadReply.SerializeToString,
-            ),
-            'UploadPublicLogits': grpc.stream_unary_rpc_method_handler(
-                    servicer.UploadPublicLogits,
-                    request_deserializer=fed__pb2.PublicLogitsPayload.FromString,
                     response_serializer=fed__pb2.UploadReply.SerializeToString,
             ),
     }
@@ -187,33 +171,6 @@ class FederatedService(object):
             target,
             '/fed.FederatedService/UploadUpdate',
             fed__pb2.UploadRequest.SerializeToString,
-            fed__pb2.UploadReply.FromString,
-            options,
-            channel_credentials,
-            insecure,
-            call_credentials,
-            compression,
-            wait_for_ready,
-            timeout,
-            metadata,
-            _registered_method=True)
-
-    @staticmethod
-    def UploadPublicLogits(request_iterator,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.stream_unary(
-            request_iterator,
-            target,
-            '/fed.FederatedService/UploadPublicLogits',
-            fed__pb2.PublicLogitsPayload.SerializeToString,
             fed__pb2.UploadReply.FromString,
             options,
             channel_credentials,
