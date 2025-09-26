@@ -10,9 +10,11 @@ python -m grpc_tools.protoc -I proto --python_out=proto --grpc_python_out=proto 
 
 将在 proto/ 下生成 fed_pb2.py 与 fed_pb2_grpc.py
 
-注意重新生成后要修改fed_pb2_grpc.py: from . import fed_pb2 as fed__pb2
+注意重新生成后要修改fed_pb2_grpc.py 
+
+把 import fed_pb2 as fed__pb2 改成 from . import fed_pb2 as fed__pb2
 
 ## 启动示例
 
-在scripts目录下运行launch.py，具体命令参照scripts下的README.md
+在根目录下运行launch.py，具体命令参照scripts下的README.md
 
