@@ -121,6 +121,8 @@ def main():
                         help="Dataset name under dataset/, used to build public test loader")
     parser.add_argument("--num_classes", type=int)
     parser.add_argument("--num_clients", type=int, default=3)
+    parser.add_argument("--feature_dim", type=int, default=512)
+    parser.add_argument("--encoder_ratio", type=float, default=1.0)
     parser.add_argument("--rounds", type=int, default=30)
     parser.add_argument("--local_epochs", type=int, default=5)
     parser.add_argument("--batch_size", type=int, default=64)
@@ -147,6 +149,8 @@ def main():
         momentum=args.momentum,
         sample_fraction=args.sample_fraction,
         model_name=args.model_name,
+        feature_dim=args.feature_dim,
+        encoder_ratio=args.encoder_ratio
     )
 
     server_test_loader = server_data_loader(args.data_root, args.dataset_name, args.batch_size, )

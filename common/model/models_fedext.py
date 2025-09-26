@@ -1,10 +1,45 @@
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-from flcore.trainmodel.models import BaseHeadSplit
-import copy
-from collections import OrderedDict
 import math
+import torch
+import torch.nn.functional as F
+import torchvision
+from torch import nn, Tensor
+from collections import OrderedDict
+
+
+# split an original model into a base and a head
+class BaseHeadSplit(nn.Module):
+    def __init__(self, cid, model_name, feature_dim, num_classes):
+        super().__init__()
+
+        if model_name == "resnet18":
+            self.base = torchvision.models.resnet18(pretrained=False)
+        else:
+            raise ValueError(f"Unsupported model: {model_name}")
+        
+        
+        head = None # you may need more code for pre-existing heterogeneous heads
+        if hasattr(self.base, 'heads'):
+            head = self.base.heads
+            self.base.heads = nn.AdaptiveAvgPool1d(feature_dim)
+        elif hasattr(self.base, 'head'):
+            head = self.base.head
+            self.base.head = nn.AdaptiveAvgPool1d(feature_dim)
+        elif hasattr(self.base, 'fc'):
+            head = self.base.fc
+            self.base.fc = nn.AdaptiveAvgPool1d(feature_dim)
+        elif hasattr(self.base, 'classifier'):
+            head = self.base.classifier
+            self.base.classifier = nn.AdaptiveAvgPool1d(feature_dim)
+        else:
+            raise('The base model does not have a classification head.')
+
+        
+        self.head = nn.Linear(feature_dim, num_classes)
+        
+    def forward(self, x):
+        out = self.base(x)
+        out = self.head(out)
+        return out
 
 
 class FedEXTModel(BaseHeadSplit):
@@ -14,11 +49,11 @@ class FedEXTModel(BaseHeadSplit):
     Specifically designed to handle ResNet18 and FedAvgCNN architectures.
     """
 
-    def __init__(self, args, cid):
-        super().__init__(args, cid)
+    def __init__(self, cid, model_name, feature_dim, num_classes, encoder_ratio):
+        super().__init__(cid, model_name, feature_dim, num_classes)
 
         # Store encoder ratio for automatic split calculation
-        self.encoder_ratio = getattr(args, 'encoder_ratio', 0.7)
+        self.encoder_ratio = encoder_ratio
         self.cid = cid
 
         # Layer management

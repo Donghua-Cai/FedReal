@@ -6,7 +6,8 @@ from typing import Dict, List, Tuple, Set, Optional
 import torch
 
 from common.serialization import bytes_to_state_dict, state_dict_to_bytes
-from common.model.create_model import create_model
+# from common.model.create_model import create_model
+from common.model.models_fedext import FedEXTModel
 from common.utils import select_clients
 
 from .eval import evaluate
@@ -20,7 +21,8 @@ class Aggregator:
         self.cfg = config
         self.device = torch.device(device)
 
-        self.model = create_model(self.cfg.model_name, num_classes=self.cfg.num_classes).to(self.device)
+        #self.model = create_model(self.cfg.model_name, num_classes=self.cfg.num_classes).to(self.device)
+        self.model = FedEXTModel(cid=99, model_name=self.cfg.model_name, feature_dim=self.cfg.feature_dim, num_classes=self.cfg.num_classes, encoder_ratio=self.cfg.encoder_ratio).to(device)
         self.global_bytes = state_dict_to_bytes(self.model.state_dict())
 
         self.public_test_loader = public_test_loader

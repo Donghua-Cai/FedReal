@@ -10,7 +10,7 @@ from proto import fed_pb2, fed_pb2_grpc
 #from common.dataset import build_imagefolder_loaders_for_client
 #from common.dataset.data_transform import get_transform
 from common.data_utils.data_loader import client_data_loader
-from common.model.create_model import create_model
+from common.model.models_fedext import FedEXTModel
 from common.serialization import bytes_to_state_dict, state_dict_to_bytes
 from common.utils import setup_logger, set_seed
 from client.trainer import train_local, evaluate
@@ -30,11 +30,13 @@ def main():
                         help="Dataset name under data/, e.g., cifar10, nwpu, dota")
     parser.add_argument("--num_classes", type=int)                        
     parser.add_argument("--num_clients", type=int, default=3)
+    parser.add_argument("--feature_dim", type=int, default=512)
     parser.add_argument("--batch_size", type=int, default=64,
                         help="Batch size")
     parser.add_argument("--num_workers", type=int, default=None,
                         help="Dataloader workers (None = auto)")
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--encoder_ratio", type=float, default=1.0)
     
     args = parser.parse_args()
 
@@ -114,7 +116,8 @@ def main():
             continue
 
         # 拉取并加载全局模型
-        model = create_model(task.config.model_name, num_classes=args.num_classes).to(device)
+        # model = create_model(task.config.model_name, num_classes=args.num_classes).to(device)
+        model = FedEXTModel(client_index, task.config.model_name, args.feature_dim, args.num_classes, args.encoder_ratio).to(device)
         state_dict = bytes_to_state_dict(task.global_model)
         model.load_state_dict(state_dict)
 
