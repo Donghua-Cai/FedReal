@@ -17,7 +17,7 @@ python scripts/launch.py \
   --server_warmup_sec 2 \
   --stagger_sec 0.2 \
   --env_omp1 \
-  --gpu_id 3 \
+  --gpus 4,5,6,7 \
   --log_dir logs
 
 
