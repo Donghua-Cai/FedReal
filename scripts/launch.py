@@ -18,10 +18,7 @@ def kill_existing():
     ]
     for pat in patterns:
         try:
-            subprocess.run(
-                ["pkill", "-f", pat],
-                check=False,  # 不报错
-            )
+            subprocess.run(["pkill", "-f", pat], check=False)
         except Exception:
             pass
 
@@ -38,7 +35,7 @@ def make_logs_dir():
 def ts():
     return datetime.now().strftime("%Y%m%d_%H%M%S")
 
-def launch(cmd, log_path: Path):
+def launch(cmd, log_path: Path, env=None):
     log_f = open(log_path, "w")
     # 让子进程成为新的进程组，便于整体 kill（Linux/macOS）
     if os.name != "nt":
@@ -48,6 +45,7 @@ def launch(cmd, log_path: Path):
             stderr=subprocess.STDOUT,
             preexec_fn=os.setsid,
             close_fds=True,
+            env=env
         )
     else:
         return subprocess.Popen(
@@ -55,6 +53,7 @@ def launch(cmd, log_path: Path):
             stdout=log_f,
             stderr=subprocess.STDOUT,
             creationflags=subprocess.CREATE_NEW_PROCESS_GROUP,  # type: ignore[attr-defined]
+            env=env
         )
 
 def kill_proc_tree(proc):
@@ -120,7 +119,8 @@ def parse_args():
     p.add_argument("--bind", type=str, default="0.0.0.0:50052")
     p.add_argument("--server_addr", type=str, default="127.0.0.1:50052")
     p.add_argument("--data_root", type=str, default="./dataset")
-    p.add_argument("--dataset_name", type=str, default="Cifar10", choices=["Cifar10", "Cifar100", "NWPU-RESISC45", "DOTA"])
+    p.add_argument("--dataset_name", type=str, default="Cifar10",
+                   choices=["Cifar10", "Cifar100", "NWPU-RESISC45", "DOTA"])
     p.add_argument("--num_classes", type=int)
     p.add_argument("--rounds", type=int, default=30)
     p.add_argument("--local_epochs", type=int, default=5)
@@ -135,12 +135,17 @@ def parse_args():
     p.add_argument("--client_device", type=str, default=None, help="Client device override, e.g., cpu to save GPU")
     p.add_argument("--num_workers", type=int, default=None, help="DataLoader workers for both server/client (if applicable)")
 
+    # Multi-GPU distribution
+    p.add_argument("--gpus", type=str, default="0,1,2,3",
+                   help="GPU id list for clients, e.g. '0,1,2,3'")
+    p.add_argument("--server_gpu", type=int, default=0,
+                   help="GPU id for server process (from the real system ids)")
+
     # Launch behavior
     p.add_argument("--stagger_sec", type=float, default=0.2, help="Stagger between client launches")
     p.add_argument("--server_warmup_sec", type=float, default=2.0, help="Wait before launching clients")
     p.add_argument("--log_dir", type=str, default="logs")
     p.add_argument("--env_omp1", action="store_true", help="Set OMP/MKL/OPENBLAS threads to 1 to reduce CPU contention")
-    p.add_argument("--gpu_id", type=int, default=0, help="Use this single GPU for server and all clients")
 
     return p.parse_args()
 
@@ -154,9 +159,22 @@ def main():
         os.environ.setdefault("MKL_NUM_THREADS", "1")
         os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
 
-    
-    os.environ["CUDA_VISIBLE_DEVICES"] = str(args.gpu_id)
-    os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "max_split_size_mb:128,expandable_segments:True")
+    # 解析 GPU 列表
+    gpu_list = [g.strip() for g in args.gpus.split(",") if g.strip() != ""]
+    if len(gpu_list) == 0:
+        print("[Launcher] WARNING: --gpus is empty; clients will inherit parent CUDA_VISIBLE_DEVICES.")
+    else:
+        print(f"[Launcher] Client GPUs: {gpu_list}")
+    print(f"[Launcher] Server GPU: {args.server_gpu}")
+
+    # Server env（放在单独的 GPU 上）
+    server_env = os.environ.copy()
+    # 若你希望 server 也在 GPU 上跑评测/聚合，可设置为指定 id；否则留空跑 CPU
+    if args.device is None or args.device.startswith("cuda"):
+        server_env["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
+        server_env["CUDA_VISIBLE_DEVICES"] = str(args.server_gpu)
+    # 限制碎片化以减缓 OOM 风险
+    server_env.setdefault("PYTORCH_CUDA_ALLOC_CONF", "max_split_size_mb:128,expandable_segments:True")
 
     # Server
     server_cmd = build_server_cmd(args)
@@ -164,7 +182,7 @@ def main():
     print("[Launcher] Starting Server:")
     print(" ", " ".join(server_cmd))
     print(" ", f"logs -> {server_log}")
-    server_proc = launch(server_cmd, server_log)
+    server_proc = launch(server_cmd, server_log, env=server_env)
 
     # Optional warmup for server to bind port
     time.sleep(args.server_warmup_sec)
@@ -174,10 +192,30 @@ def main():
     for i in range(args.num_clients):
         client_cmd, cname = build_client_cmd(args, i)
         clog = Path(args.log_dir) / f"client_{cname}.log"
-        print(f"[Launcher] Starting Client {cname}:")
+
+        # 为每个 client 设置独立 env
+        cenv = os.environ.copy()
+        cenv.setdefault("PYTORCH_CUDA_ALLOC_CONF", "max_split_size_mb:128,expandable_segments:True")
+        cenv["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
+
+        if args.client_device and args.client_device.lower() == "cpu":
+            # 强制用 CPU
+            cenv["CUDA_VISIBLE_DEVICES"] = ""
+            gpu_assigned = "CPU"
+        else:
+            # 轮转分配 GPU
+            if len(gpu_list) > 0:
+                gid = gpu_list[i % len(gpu_list)]
+                cenv["CUDA_VISIBLE_DEVICES"] = gid
+                gpu_assigned = gid
+            else:
+                # 不改动父进程的 CUDA_VISIBLE_DEVICES
+                gpu_assigned = os.environ.get("CUDA_VISIBLE_DEVICES", "<inherit>")
+
+        print(f"[Launcher] Starting Client {cname} on GPU {gpu_assigned}:")
         print(" ", " ".join(client_cmd))
         print(" ", f"logs -> {clog}")
-        p = launch(client_cmd, clog)
+        p = launch(client_cmd, clog, env=cenv)
         client_procs.append(p)
         time.sleep(args.stagger_sec)
 
@@ -185,10 +223,8 @@ def main():
     print(f"[Launcher] Tail server log: tail -f {server_log}\n")
 
     try:
-        # 等待子进程（在此简单阻塞；如要更复杂的健康检查可自行扩展）
         while True:
             time.sleep(1)
-            # 如果 server 挂了，自动退出（可选）
             if server_proc.poll() is not None:
                 print("[Launcher] Server exited. Terminating clients...")
                 break
