@@ -104,8 +104,8 @@ def main():
                 elapsed = end_time - start_time
                 logger.info(f"[Client {client_id}] Total training time: {elapsed:.2f}s "
                             f"({elapsed/60:.2f} min)")
-                logger.info(f"[Client {client_id}] total acc : {client_eval_acc}")
-                logger.info(f"[Client {client_id}] total loss : {client_eval_loss}")
+                logger.info(f"[Client {client_id}] total acc : {client_pre_eval_acc}")
+                logger.info(f"[Client {client_id}] total loss : {client_pre_eval_loss}")
             break
 
         if task.round != last_round:
