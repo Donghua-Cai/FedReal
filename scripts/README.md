@@ -3,8 +3,8 @@ python scripts/launch.py \
   --bind 0.0.0.0:51052 \
   --server_addr 127.0.0.1:51052 \
   --data_root ./dataset \
-  --dataset_name NWPU-RESISC45 \
-  --num_classes 45 \
+  --dataset_name DOTA \
+  --num_classes 15 \
   --rounds 10 \
   --local_epochs 5 \
   --batch_size 10 \
