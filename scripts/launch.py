@@ -131,7 +131,7 @@ def parse_args():
     p.add_argument("--seed", type=int, default=42)
     p.add_argument("--model_name", type=str, default="resnet18")
     p.add_argument("--max_message_mb", type=int, default=128)
-    p.add_argument("--device", type=str, default=None, help="Server device override, e.g., cuda or cpu")
+    p.add_argument("--device", type=str, default="cpu", help="Server device override, e.g., cuda or cpu")
     p.add_argument("--client_device", type=str, default=None, help="Client device override, e.g., cpu to save GPU")
     p.add_argument("--num_workers", type=int, default=None, help="DataLoader workers for both server/client (if applicable)")
 
