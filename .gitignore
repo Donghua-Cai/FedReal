@@ -8,4 +8,5 @@ __pycache__/
 *$py.class
 
 /logs/*
+!/logs/.gitkeep
 /logs_cifar100/*
