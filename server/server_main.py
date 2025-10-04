@@ -22,12 +22,14 @@ from server.aggregator import Aggregator
 from common.data_utils.data_loader import server_data_loader
 
 class FederatedService(fed_pb2_grpc.FederatedServiceServicer):
-    def __init__(self, cfg: FedConfig, public_test_loader, device: str = "cpu"):
+    def __init__(self, cfg: FedConfig, public_test_loader, server_target, client_target, device: str = "cpu"):
         self.cfg = cfg
-        self.aggregator = Aggregator(cfg, public_test_loader=public_test_loader, device=device)
+        self.aggregator = Aggregator(cfg, public_test_loader=public_test_loader, server_target=server_target, client_target=client_target, device=device)
         self.logger = logging.getLogger("Server")
         self.start_time = None
         self.end_time = None
+        self.server_end_time = None
+        self.client_end_time = None
         
 
         self._byte_lock = threading.Lock()
@@ -134,6 +136,8 @@ def main():
     parser.add_argument("--max_message_mb", type=int, default=128)
     parser.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu")
     parser.add_argument("--num_workers", type=int, default=None, help="Dataloader workers (None = auto)")
+    parser.add_argument("--server_target", type=float, default=0.6)
+    parser.add_argument("--client_target", type=float, default=0.6)
     args = parser.parse_args()
 
     set_seed(args.seed)
@@ -159,7 +163,7 @@ def main():
 
     cfg.num_classes = num_classes
 
-    service = FederatedService(cfg, public_test_loader=server_test_loader, device=args.device)
+    service = FederatedService(cfg, public_test_loader=server_test_loader, server_target=args.server_target, client_target=args.client_target, device=args.device)
 
     max_len = cfg.max_message_mb * 1024 * 1024
     server = grpc.server(
@@ -179,17 +183,37 @@ def main():
     server.add_insecure_port(args.bind)
     server.start()
     logger.info(f"Current setting:")
+    logger.info(f" - model name: {args.model_name}")
     logger.info(f" - dataset : {args.dataset_name}")
     logger.info(f" - clients number : {args.num_clients}")
     logger.info(f" - local epochs : {args.local_epochs}")
+    logger.info(f" - server target : {args.server_target}")
+    logger.info(f" - client target : {args.client_target}")
     logger.info(f"Listening on {args.bind}; device={args.device}")
+
 
     # 只打印一次“完成”
     printed_done = False
+    server_printed_done = False
+    client_printed_done = False
+    server_elapsed = None
+    client_elapsed = None
     try:
         while True:
             time.sleep(1)
-            if (service.aggregator.current_round >= cfg.total_rounds
+            if service.aggregator.server_converge:
+                if not server_printed_done:
+                    service.server_end_time = time.time()
+                    server_elapsed = service.server_end_time - service.start_time
+                    logger.info(f"Server training completed. Total time: {server_elapsed:.2f}s ({server_elapsed/60:.2f} min).")
+                    server_printed_done = True
+            if service.aggregator.client_converge:
+                if not client_elapsed:
+                    service.client_end_time = time.time()
+                    client_elapsed = service.client_end_time - service.start_time
+                    logger.info(f"Client training completed. Total time: {client_elapsed:.2f}s ({client_elapsed/60:.2f} min).")
+                    client_printed_done = True
+            if (service.aggregator.server_converge and service.aggregator.client_converge) or (service.aggregator.current_round >= cfg.total_rounds
                 and service.aggregator.expected_updates == 0
                 and not service.aggregator.selected_this_round):
                 if not printed_done:
@@ -197,6 +221,8 @@ def main():
                         service.end_time = time.time()
                         elapsed = service.end_time - service.start_time
                         logger.info(f"Training completed. Total time: {elapsed:.2f}s ({elapsed/60:.2f} min).")
+                        logger.info(f"Server training time : {server_elapsed:.2f}s ({server_elapsed/60:.2f} min).")
+                        logger.info(f"Client training time : {client_elapsed:.2f}s ({client_elapsed/60:.2f} min).")
                     else:
                         logger.info("Training completed.")
                     

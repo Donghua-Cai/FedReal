@@ -97,6 +97,8 @@ def main():
             start_time = time.time()
             logger.info("Training timer started.")
 
+        if task.round == -1:
+            break
         if task.round >= cfg.total_rounds:
             logger.info(f"[Client {client_id}] All rounds finished.")
             if start_time is not None and end_time is None:
@@ -158,8 +160,8 @@ def main():
             # 如果被拒绝（比如轮次错位），稍后重试
             time.sleep(1.0)
 
-    print("Client pre acc : {client_pre_eval_acc}")
-    print("Client post acc : {client_post_eval_acc}")
+    print(f"Client pre acc : {client_pre_eval_acc}")
+    print(f"Client post acc : {client_post_eval_acc}")
 if __name__ == "__main__":
     main()
 

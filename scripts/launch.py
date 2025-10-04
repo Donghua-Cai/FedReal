@@ -84,6 +84,8 @@ def build_server_cmd(args):
         "--seed", str(args.seed),
         "--model_name", args.model_name,
         "--max_message_mb", str(args.max_message_mb),
+        "--server_target", str(args.server_target),
+        "--client_target", str(args.client_target)
     ]
     if args.device:
         cmd += ["--device", args.device]
@@ -134,6 +136,8 @@ def parse_args():
     p.add_argument("--device", type=str, default="cpu", help="Server device override, e.g., cuda or cpu")
     p.add_argument("--client_device", type=str, default=None, help="Client device override, e.g., cpu to save GPU")
     p.add_argument("--num_workers", type=int, default=None, help="DataLoader workers for both server/client (if applicable)")
+    p.add_argument("--server_target", type=float, default=0.6)
+    p.add_argument("--client_target", type=float, default=0.6)
 
     # Multi-GPU distribution
     p.add_argument("--gpus", type=str, default="0,1,2,3",

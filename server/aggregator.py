@@ -17,7 +17,7 @@ logger = logging.getLogger("Server").getChild("Aggregator")
 
 
 class Aggregator:
-    def __init__(self, config, public_test_loader=None, device: str = "cpu"):
+    def __init__(self, config, public_test_loader=None, server_target=0.6, client_target=0.6, device: str = "cpu"):
         self.cfg = config
         self.device = torch.device(device)
 
@@ -44,6 +44,11 @@ class Aggregator:
         self.client_average_test_acc = []
         self.server_eval_acc = []
         self.server_eval_loss = []
+
+        self.server_target = server_target
+        self.client_target = client_target
+        self.client_converge = False
+        self.server_converge = False
 
     # —— 注册 ——
     def register(self, client_name: str) -> Tuple[str, int]:
@@ -201,6 +206,8 @@ class Aggregator:
             logger.info(f"[Round {self.current_round}] Global Eval — loss={loss:.4f}, acc={acc:.4f}")
             self.server_eval_acc.append(acc)
             self.server_eval_loss.append(loss)
+            if acc > self.server_target:
+                self.server_converge = True
         else:
             logger.info("failed")
             logger.debug(f"[Round {self.current_round}] Global Eval — skipped (no public_test_loader)")
@@ -208,13 +215,17 @@ class Aggregator:
 
         avg_acc = sum(self.client_test_acc) / len(self.client_test_acc)
         self.client_average_test_acc.append(avg_acc)
-
+        if avg_acc > self.client_target:
+            self.client_converge = True
         # 前进到下一轮
-        self.current_round += 1
-        self.selected_this_round = []
-        self.expected_updates = 0
-        self.received_updates.clear()
-        self.completed_this_round.clear()
-        self.client_test_acc = []
+        if not self.server_converge or not self.client_converge:
+            self.current_round += 1
+            self.selected_this_round = []
+            self.expected_updates = 0
+            self.received_updates.clear()
+            self.completed_this_round.clear()
+            self.client_test_acc = []
+        else :
+            self.current_round = -1
 
     
