@@ -63,7 +63,7 @@ def main():
 
     logger.info(f"[Client {client_id}] index={client_index}; device={args.device}")
 
-    train_loader, test_loader = client_data_loader(args.data_root, args.dataset_name, client_index, args.batch_size)
+    train_loader, test_loader = client_data_loader(args.data_root, args.dataset_name, client_index-1, args.batch_size)
 
     # logger.info(f"[Client {client_id}] group_id={group_id}")
 
