@@ -70,6 +70,7 @@ def client_data_loader(
     num_workers: int = 0
 ):
     """Return DataLoader for one client (train + test)."""
+    print(f"Get data loading request from client index :{cid}")
     train_path = os.path.join(data_root, dataset_name, "train", f"{cid}.npz")
     test_path = os.path.join(data_root, dataset_name, "test", f"{cid}.npz")
 
