@@ -94,6 +94,9 @@ def main():
     while True:
         task = stub.GetTask(fed_pb2.GetTaskRequest(client_id=client_id))
         
+        if task.round == 0:
+            logger.info("Get signal, training start!")
+            
         if start_time is None and task.round < cfg.total_rounds:
             start_time = time.time()
             logger.info("Training timer started.")
