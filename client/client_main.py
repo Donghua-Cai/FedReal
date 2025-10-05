@@ -111,9 +111,7 @@ def main():
                 logger.info(f"[Client {client_id}] total loss : {client_pre_eval_loss}")
             break
 
-        if task.round != last_round:
-            if task.round == 0:
-                logger.info("Get signal, training start!")
+        if task.round != last_round:    
             logger.info(f"[Client {client_id}] Enter round {task.round}")
             last_round = task.round
 
@@ -123,6 +121,8 @@ def main():
 
         # 拉取并加载全局模型
         # model = create_model(task.config.model_name, num_classes=args.num_classes).to(device)
+        if task.round == 0:
+            logger.info("Get signal, training start!")
         if not model:
             model = FedEXTModel(client_index, task.config.model_name, args.feature_dim, args.num_classes, args.encoder_ratio).to(device)
         state_dict = bytes_to_state_dict(task.global_model)
