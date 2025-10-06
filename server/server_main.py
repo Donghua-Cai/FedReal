@@ -221,8 +221,10 @@ def main():
                         service.end_time = time.time()
                         elapsed = service.end_time - service.start_time
                         logger.info(f"Training completed. Total time: {elapsed:.2f}s ({elapsed/60:.2f} min).")
-                        logger.info(f"Server training time : {server_elapsed:.2f}s ({server_elapsed/60:.2f} min).")
-                        logger.info(f"Client training time : {client_elapsed:.2f}s ({client_elapsed/60:.2f} min).")
+                        if server_elapsed is not None:
+                            logger.info(f"Server training time : {server_elapsed:.2f}s ({server_elapsed/60:.2f} min).")
+                        if client_elapsed is not None:
+                            logger.info(f"Client training time : {client_elapsed:.2f}s ({client_elapsed/60:.2f} min).")
                     else:
                         logger.info("Training completed.")
                     

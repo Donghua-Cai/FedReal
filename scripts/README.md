@@ -19,8 +19,8 @@ python scripts/launch.py \
   --env_omp1 \
   --gpus 0,1,2,3 \
   --log_dir logs \
-  --server_target 0.2 \
-  --client_target 0.2
+  --server_target 0.58 \
+  --client_target 0.58
 
 
 
