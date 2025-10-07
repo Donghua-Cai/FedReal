@@ -50,13 +50,16 @@ class Aggregator:
         self.client_converge = False
         self.server_converge = False
 
+        self.client_dict = {}
+
     # —— 注册 ——
     def register(self, client_name: str) -> Tuple[str, int]:
         with self.lock:
             client_id = f"C{len(self.registered):03d}"
             self.registered.append(client_id)
             self.client_index[client_id] = len(self.client_index)
-            logger.info(f"Registered {client_id} (index={self.client_index[client_id]})")
+            logger.info(f"Registered {client_id} (index={self.client_index[client_id]})  ip:{client_name}")
+            self.client_dict[client_id] = client_name
             return client_id, self.client_index[client_id]
 
     # —— 采样 ——
@@ -112,6 +115,10 @@ class Aggregator:
 
             # 采样成功后打印
             if self.selected_this_round:
+                if self.current_round == 0:
+                    logger.info("All clients registered successfully!")
+                    for name, host in self.client_dict.items():
+                        logger.info(f"Registered client : {name} (ip: {host})")
                 logger.info(
                     f"Round {self.current_round} sampling -> "
                     f"{self.selected_this_round}, expected_updates={self.expected_updates}"

@@ -58,7 +58,7 @@ class FederatedService(fed_pb2_grpc.FederatedServiceServicer):
     def RegisterClient(self, request, context):
         client_id, client_index = self.aggregator.register(request.client_name)
         group_index = client_index % 5
-        self.logger.info(f"Registered {client_id} (index={client_index})")
+        self.logger.info(f"Registered {client_id} (index={client_index})  ip:{request.client_name}")
         return fed_pb2.RegisterReply(
             client_id=client_id,
             client_index=client_index,
