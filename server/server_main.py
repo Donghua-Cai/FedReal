@@ -247,7 +247,7 @@ def main():
                     logger.info(f"Client average acc: {service.aggregator.client_average_test_acc}")
                     logger.info(f"Server total acc : {service.aggregator.server_eval_acc}")
                     logger.info(f"Server total loss : {service.aggregator.server_eval_loss}")
-                    print("Press Ctrl-C to exit")
+                    logger.info("Press Ctrl-C to exit")
     except KeyboardInterrupt:
         pass
     finally:
